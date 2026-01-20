@@ -7,6 +7,7 @@ interface ImageUploaderProps {
   onUpload: (files: ImageFile[]) => void;
   multiple?: boolean;
   accept?: string;
+  compact?: boolean;  // 컴팩트 모드 추가
 }
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({
@@ -14,6 +15,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   onUpload,
   multiple = false,
   accept = "image/*",
+  compact = false,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -52,7 +54,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
   };
 
   return (
-    <div className="w-full">
+    <div className={compact ? "w-full aspect-square" : "w-full"}>
       <input
         type="file"
         ref={inputRef}
@@ -63,14 +65,24 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
       />
       <button
         onClick={() => inputRef.current?.click()}
-        className="w-full py-4 border-2 border-dashed border-white/10 rounded-xl bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all group"
+        className={`w-full border-2 border-dashed border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all group ${
+          compact 
+            ? "h-full rounded-lg flex items-center justify-center" 
+            : "py-4 rounded-xl"
+        }`}
       >
-        <div className="flex flex-col items-center gap-2">
-          <i className="fas fa-cloud-upload-alt text-gray-500 group-hover:text-white transition-colors text-xl"></i>
-          <span className="text-sm font-medium text-gray-400 group-hover:text-white">
+        {compact ? (
+          <span className="text-2xl text-gray-500 group-hover:text-white transition-colors">
             {label}
           </span>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            <i className="fas fa-cloud-upload-alt text-gray-500 group-hover:text-white transition-colors text-xl"></i>
+            <span className="text-sm font-medium text-gray-400 group-hover:text-white">
+              {label}
+            </span>
+          </div>
+        )}
       </button>
     </div>
   );

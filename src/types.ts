@@ -1,23 +1,4 @@
 // src/types.ts
-export interface ImageFile {
-  name?: string;
-  url: string;
-  file?: File;
-  id?: string;
-  base64?: string;
-  mimeType?: string;
-}
-
-export interface GenerationResult {
-  id?: string;
-  imageUrl: string;
-  url?: string; // 호환성을 위해 유지
-  summary?: string;
-  prompt?: string;
-  timestamp?: number;
-  aspectRatio?: AspectRatio;
-  grounding?: string[] | null;
-}
 
 export enum AspectRatio {
   SQUARE = 'SQUARE',
@@ -25,10 +6,13 @@ export enum AspectRatio {
   MOBILE_9_16 = 'MOBILE_9_16',
 }
 
-export enum ImageSize {
-  K1 = 'K1',
-  K2 = 'K2',
-  K4 = 'K4',
+export interface ImageFile {
+  id?: string;
+  url: string;
+  name?: string;
+  base64?: string;        // 업로드 전 임시 저장, ImgBB 업로드 후 제거됨
+  mimeType?: string;
+  file?: File;            // 원본 File 객체
 }
 
 export interface GenerationConfig {
@@ -36,6 +20,29 @@ export interface GenerationConfig {
   prompt?: string;
   previousImage?: string;
   imageSize?: string;
+}
+
+export interface GenerationResult {
+  id: string;
+  imageUrl: string;
+  summary?: string;
+  prompt?: string;
+  timestamp: number;
+  aspectRatio?: AspectRatio;
+  grounding?: any;
+}
+
+export interface Workspace {
+  id?: string;
+  name: string;
+  owner?: string;
+  userName?: string;      // 레거시 호환성
+  baseImage?: ImageFile | null;  // Firestore에서 undefined일 수 있음
+  productImages: ImageFile[];
+  history: GenerationResult[];
+  activeVersionIndex: number;
+  lastUpdated: number;
+  createdAt?: number;
 }
 
 export interface AppState {
@@ -47,19 +54,4 @@ export interface AppState {
   error: string | null;
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
-  result?: GenerationResult | null; // 호환성을 위해 유지
-}
-
-export interface Workspace {
-  id: string;
-  name?: string;
-  userName?: string;
-  owner?: string;
-  createdAt?: number;
-  lastUpdated?: number;
-  baseImage: ImageFile | null;
-  productImages: ImageFile[];
-  history: GenerationResult[];
-  activeVersionIndex: number;
-  result?: GenerationResult | null; // 호환성을 위해 유지
 }
