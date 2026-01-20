@@ -238,13 +238,49 @@ export async function fetchProjects(): Promise<Workspace[]> {
 /**
  * 프로젝트 업데이트
  */
-export async function updateProject(docId: string, updates: Partial<Workspace>): Promise<void> {
+export async function updateProject(
+  docId: string, 
+  project: Workspace,
+  onProgress?: (status: string) => void
+): Promise<void> {
   try {
+    // 1. 베이스 이미지 업로드
+    onProgress?.('베이스 이미지 업로드 중...');
+    let uploadedBaseImage = null;
+    if (project.baseImage) {
+      const uploaded = await uploadImageFile(project.baseImage, 'base');
+      uploadedBaseImage = JSON.parse(JSON.stringify(uploaded));
+    }
+    
+    // 2. 제품 이미지들 업로드
+    onProgress?.('제품 이미지 업로드 중...');
+    const uploadedProductImages = [];
+    for (let i = 0; i < project.productImages.length; i++) {
+      const uploaded = await uploadImageFile(project.productImages[i], `product_${i}`);
+      uploadedProductImages.push(JSON.parse(JSON.stringify(uploaded)));
+    }
+    
+    // 3. 히스토리 이미지들 업로드
+    const uploadedHistory = [];
+    for (let i = 0; i < project.history.length; i++) {
+      onProgress?.(`생성 결과 업로드 중... (${i + 1}/${project.history.length})`);
+      const uploaded = await uploadGenerationResult(project.history[i], i);
+      uploadedHistory.push(JSON.parse(JSON.stringify(uploaded)));
+    }
+    
+    // 4. Firestore 문서 업데이트
+    onProgress?.('프로젝트 업데이트 중...');
     const docRef = doc(db, "projects", docId);
     await updateDoc(docRef, {
-      ...updates,
+      name: project.name,
+      owner: project.owner,
+      baseImage: uploadedBaseImage,
+      productImages: uploadedProductImages,
+      history: uploadedHistory,
+      activeVersionIndex: project.activeVersionIndex,
       lastUpdated: Timestamp.now(),
     });
+    
     console.log("✅ Project updated:", docId);
   } catch (error) {
     console.error("❌ Error updating project:", error);

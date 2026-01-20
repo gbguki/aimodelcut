@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import ImageUploader from './components/ImageUploader';
 import { generateFashionImage } from './services/geminiService';
-import { fetchProjects, saveProject, deleteProject } from './services/firebaseService';
+import { fetchProjects, saveProject, updateProject, deleteProject } from './services/firebaseService';
 import { AppState, AspectRatio, ImageFile, GenerationResult, Workspace } from './types';
 
 const App: React.FC = () => {
@@ -21,22 +21,27 @@ const App: React.FC = () => {
   const [prompt, setPrompt] = useState<string>('');
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [tempName, setTempName] = useState('');
   
-  // 🔹 저장/불러오기 관련 상태
+  // 저장/불러오기 관련 상태
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveProgress, setSaveProgress] = useState<string>(''); // 진행 상태 메시지
+  const [saveProgress, setSaveProgress] = useState<string>('');
+  
+  // 워크스페이스 관리 상태
+  const [currentWorkspaceName, setCurrentWorkspaceName] = useState<string>('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   const timelineEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load saved user name or prompt for it
+  // Load saved user name
   useEffect(() => {
     const savedName = localStorage.getItem('vfa_user_name');
     if (!savedName) {
@@ -46,7 +51,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Load shared projects from Firebase
+  // Load projects from Firebase
   useEffect(() => {
     const loadProjects = async () => {
       setIsLoadingProjects(true);
@@ -78,6 +83,9 @@ const App: React.FC = () => {
   }, [saveSuccess]);
 
   const currentResult = state.activeVersionIndex >= 0 ? state.history[state.activeVersionIndex] : null;
+
+  // 현재 워크스페이스 정보 가져오기
+  const currentWorkspace = state.workspaces.find(ws => ws.id === state.currentWorkspaceId);
 
   const handleGenerate = async () => {
     if (!state.baseImage || state.productImages.length === 0) {
@@ -114,27 +122,41 @@ const App: React.FC = () => {
         };
       });
       setPrompt('');
+      setHasUnsavedChanges(true);
     } catch (err: any) {
       setState(prev => ({ ...prev, isGenerating: false, error: err.message || 'Error generating image.' }));
     }
   };
 
-  const handleNewProject = () => {
-    if (state.history.length > 0 && !confirm('새 프로젝트를 시작하시겠습니까?')) return;
-    setState(prev => ({
-      ...prev,
-      baseImage: null,
-      productImages: [],
-      history: [],
-      activeVersionIndex: -1,
-      currentWorkspaceId: null,
-      error: null
-    }));
-    setPrompt('');
+  // 저장 여부 확인 후 액션 실행
+  const confirmAction = (action: () => void) => {
+    if (hasUnsavedChanges && (state.baseImage || state.history.length > 0)) {
+      setPendingAction(() => action);
+      setShowUnsavedWarning(true);
+    } else {
+      action();
+    }
   };
 
-  // 🔹 개선된 저장 함수 (진행 상태 표시)
-  const handleSaveWorkspace = async () => {
+  const handleNewProject = () => {
+    confirmAction(() => {
+      setState(prev => ({
+        ...prev,
+        baseImage: null,
+        productImages: [],
+        history: [],
+        activeVersionIndex: -1,
+        currentWorkspaceId: null,
+        error: null
+      }));
+      setPrompt('');
+      setCurrentWorkspaceName('');
+      setHasUnsavedChanges(false);
+    });
+  };
+
+  // 새로 저장
+  const handleSaveNew = async () => {
     if (!newWorkspaceName.trim()) {
       setSaveError('워크스페이스 이름을 입력해주세요.');
       return;
@@ -164,29 +186,22 @@ const App: React.FC = () => {
         owner: userName,
       };
       
-      // 진행 상태 콜백과 함께 저장
-      await saveProject(newWs, (status) => {
-        setSaveProgress(status);
-      });
+      const docId = await saveProject(newWs, (status) => setSaveProgress(status));
       
-      // 프로젝트 목록 새로고침
       setSaveProgress('목록 새로고침 중...');
       const updatedProjects = await fetchProjects();
       
       setState(prev => ({
         ...prev,
         workspaces: updatedProjects as Workspace[],
-        currentWorkspaceId: newWs.id ?? null
+        currentWorkspaceId: docId
       }));
       
+      setCurrentWorkspaceName(newWorkspaceName);
       setNewWorkspaceName('');
       setSaveSuccess(true);
+      setHasUnsavedChanges(false);
       setSaveProgress('');
-      
-      // 모달은 성공 메시지 보여준 후 닫기
-      setTimeout(() => {
-        setShowWorkspaceModal(false);
-      }, 1500);
       
     } catch (error: any) {
       console.error('Save error:', error);
@@ -197,50 +212,97 @@ const App: React.FC = () => {
     }
   };
 
-  // 🔹 개선된 불러오기 함수
-  const loadWorkspace = (ws: Workspace) => {
-    setState(prev => {
-      // Firestore에서 가져온 데이터 안전하게 변환
-      const baseImage: ImageFile | null = ws.baseImage ?? null;
-      const productImages: ImageFile[] = Array.isArray(ws.productImages) ? ws.productImages : [];
-      const history: GenerationResult[] = Array.isArray(ws.history) ? ws.history : [];
-      const activeVersionIndex: number = typeof ws.activeVersionIndex === 'number' ? ws.activeVersionIndex : -1;
-      const currentWorkspaceId: string | null = ws.id ?? null;
-
-      return {
-        ...prev,
-        baseImage,
-        productImages,
-        history,
-        activeVersionIndex,
-        currentWorkspaceId,
-      };
-    });
-    setShowWorkspaceModal(false);
-  };
-  
-  // 🔹 프로젝트 삭제 함수
-  const handleDeleteWorkspace = async (ws: Workspace, e: React.MouseEvent) => {
-    e.stopPropagation();
+  // 현재 워크스페이스 업데이트
+  const handleUpdateCurrent = async () => {
+    if (!state.currentWorkspaceId || !currentWorkspace) {
+      setSaveError('업데이트할 워크스페이스가 없습니다.');
+      return;
+    }
     
-    if (!confirm(`"${ws.name}" 프로젝트를 삭제하시겠습니까?`)) return;
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveProgress('준비 중...');
     
     try {
-      await deleteProject(ws.id!);
+      const updatedWs: Workspace = {
+        ...currentWorkspace,
+        baseImage: state.baseImage,
+        productImages: state.productImages,
+        history: state.history,
+        activeVersionIndex: state.activeVersionIndex,
+        lastUpdated: Date.now(),
+      };
       
-      // 목록에서 제거
+      await updateProject(state.currentWorkspaceId, updatedWs, (status) => setSaveProgress(status));
+      
+      setSaveProgress('목록 새로고침 중...');
+      const updatedProjects = await fetchProjects();
+      
       setState(prev => ({
         ...prev,
-        workspaces: prev.workspaces.filter(w => w.id !== ws.id),
-        currentWorkspaceId: prev.currentWorkspaceId === ws.id ? null : prev.currentWorkspaceId
+        workspaces: updatedProjects as Workspace[],
       }));
+      
+      setSaveSuccess(true);
+      setHasUnsavedChanges(false);
+      setSaveProgress('');
+      
+    } catch (error: any) {
+      console.error('Update error:', error);
+      setSaveError(error.message || '업데이트 중 오류가 발생했습니다.');
+      setSaveProgress('');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 워크스페이스 불러오기
+  const loadWorkspace = (ws: Workspace) => {
+    confirmAction(() => {
+      setState(prev => {
+        const baseImage: ImageFile | null = ws.baseImage ?? null;
+        const productImages: ImageFile[] = Array.isArray(ws.productImages) ? ws.productImages : [];
+        const history: GenerationResult[] = Array.isArray(ws.history) ? ws.history : [];
+        const activeVersionIndex: number = typeof ws.activeVersionIndex === 'number' ? ws.activeVersionIndex : -1;
+
+        return {
+          ...prev,
+          baseImage,
+          productImages,
+          history,
+          activeVersionIndex,
+          currentWorkspaceId: ws.id ?? null,
+        };
+      });
+      setCurrentWorkspaceName(ws.name);
+      setHasUnsavedChanges(false);
+      setShowWorkspaceModal(false);
+    });
+  };
+  
+  // 워크스페이스 삭제
+  const handleDeleteWorkspace = async (wsId: string) => {
+    try {
+      await deleteProject(wsId);
+      
+      setState(prev => ({
+        ...prev,
+        workspaces: prev.workspaces.filter(w => w.id !== wsId),
+        currentWorkspaceId: prev.currentWorkspaceId === wsId ? null : prev.currentWorkspaceId
+      }));
+      
+      if (state.currentWorkspaceId === wsId) {
+        setCurrentWorkspaceName('');
+      }
+      
+      setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Delete error:', error);
       setSaveError('삭제 중 오류가 발생했습니다.');
     }
   };
   
-  // 🔹 프로젝트 목록 새로고침
+  // 프로젝트 목록 새로고침
   const refreshProjects = async () => {
     setIsLoadingProjects(true);
     try {
@@ -251,6 +313,15 @@ const App: React.FC = () => {
     } finally {
       setIsLoadingProjects(false);
     }
+  };
+
+  // 모달 닫기
+  const handleCloseModal = () => {
+    setShowWorkspaceModal(false);
+    setSaveError(null);
+    setSaveSuccess(false);
+    setSaveProgress('');
+    setNewWorkspaceName('');
   };
 
   const getAspectRatioClass = (ratio: AspectRatio) => {
@@ -285,25 +356,31 @@ const App: React.FC = () => {
             <i className="fas fa-user text-gray-600 text-xs"></i>
             {userName || 'Anonymous'}
           </span>
-          {state.currentWorkspaceId && (
+          
+          {/* 현재 워크스페이스 표시 */}
+          {currentWorkspaceName && (
             <>
               <div className="h-3 w-px bg-white/10"></div>
-              <span className="text-[10px] text-green-400 flex items-center gap-1">
-                <i className="fas fa-check-circle text-xs"></i>
-                저장됨
+              <span className="text-[10px] text-blue-400 flex items-center gap-1.5">
+                <i className="fas fa-folder-open text-xs"></i>
+                {currentWorkspaceName}
+                {hasUnsavedChanges && <span className="text-yellow-400">*</span>}
               </span>
             </>
           )}
         </div>
         <div className="flex gap-2">
           <button onClick={handleNewProject} className="px-4 py-1.5 glass rounded-lg text-[10px] font-bold hover:bg-white/10 transition-all tracking-[0.05em] uppercase">New</button>
-          <button onClick={() => setShowWorkspaceModal(true)} className="px-4 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-[10px] font-bold transition-all tracking-[0.05em] uppercase text-white">저장/불러오기</button>
+          <button onClick={() => setShowWorkspaceModal(true)} className="px-4 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-[10px] font-bold transition-all tracking-[0.05em] uppercase text-white">
+            <i className="fas fa-cloud mr-1.5"></i>
+            워크스페이스
+          </button>
         </div>
       </div>
 
       {/* Main UI */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - 이미지 업로드 & 설정 */}
+        {/* Left Panel */}
         <div className="w-80 border-r border-white/5 bg-[#070707] p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em]">베이스 이미지</h3>
@@ -315,7 +392,10 @@ const App: React.FC = () => {
                   className="w-full rounded-xl object-cover"
                 />
                 <button
-                  onClick={() => setState(prev => ({ ...prev, baseImage: null }))}
+                  onClick={() => {
+                    setState(prev => ({ ...prev, baseImage: null }));
+                    setHasUnsavedChanges(true);
+                  }}
                   className="absolute top-2 right-2 w-8 h-8 bg-black/60 hover:bg-red-500/80 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
                 >
                   <i className="fas fa-times text-white text-sm"></i>
@@ -326,6 +406,7 @@ const App: React.FC = () => {
                 onUpload={(files: ImageFile[]) => {
                   if (files.length > 0) {
                     setState(prev => ({ ...prev, baseImage: files[0] }));
+                    setHasUnsavedChanges(true);
                   }
                 }}
                 label="베이스 이미지 업로드"
@@ -344,10 +425,13 @@ const App: React.FC = () => {
                     className="w-full aspect-square rounded-lg object-cover"
                   />
                   <button
-                    onClick={() => setState(prev => ({
-                      ...prev,
-                      productImages: prev.productImages.filter((_, i) => i !== idx)
-                    }))}
+                    onClick={() => {
+                      setState(prev => ({
+                        ...prev,
+                        productImages: prev.productImages.filter((_, i) => i !== idx)
+                      }));
+                      setHasUnsavedChanges(true);
+                    }}
                     className="absolute top-1 right-1 w-6 h-6 bg-black/60 hover:bg-red-500/80 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
                   >
                     <i className="fas fa-times text-white text-xs"></i>
@@ -362,6 +446,7 @@ const App: React.FC = () => {
                         ...prev, 
                         productImages: [...prev.productImages, files[0]] 
                       }));
+                      setHasUnsavedChanges(true);
                     }
                   }}
                   label="+"
@@ -449,10 +534,9 @@ const App: React.FC = () => {
               </div>
             )}
           </div>
-
         </div>
 
-        {/* Right Panel - 히스토리/타임라인 */}
+        {/* Right Panel - 히스토리 */}
         <div className="w-80 border-l border-white/5 bg-[#070707] p-6 overflow-y-auto custom-scrollbar">
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.2em] mb-4">히스토리</h3>
           {state.history.length === 0 ? (
@@ -492,35 +576,65 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* 🔹 개선된 Workspace Modal */}
+      {/* 워크스페이스 모달 */}
       {showWorkspaceModal && (
         <div className="fixed inset-0 bg-black/95 z-[999] flex flex-col items-center justify-center p-4">
-          <div className="glass p-8 rounded-2xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
+          <div className="glass p-8 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-bold uppercase tracking-[0.2em]">워크스페이스</h2>
               <button
-                onClick={() => {
-                  setShowWorkspaceModal(false);
-                  setSaveError(null);
-                  setSaveSuccess(false);
-                  setSaveProgress('');
-                }}
+                onClick={handleCloseModal}
                 className="w-8 h-8 flex items-center justify-center hover:bg-white/10 rounded-lg transition-all"
               >
                 <i className="fas fa-times text-gray-400"></i>
               </button>
             </div>
             
-            {/* 저장 섹션 */}
-            <div className="mb-6">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.15em] mb-3">새로 저장</h3>
+            {/* 현재 워크스페이스 정보 */}
+            {currentWorkspace && (
+              <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-blue-400 uppercase tracking-wider mb-1">현재 워크스페이스</div>
+                    <div className="font-bold text-white">{currentWorkspace.name}</div>
+                  </div>
+                  {hasUnsavedChanges && (
+                    <span className="text-xs text-yellow-400 flex items-center gap-1">
+                      <i className="fas fa-exclamation-circle"></i>
+                      변경사항 있음
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleUpdateCurrent}
+                  disabled={isSaving || !hasUnsavedChanges}
+                  className="w-full mt-3 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isSaving ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i>
+                      {saveProgress || '업데이트 중...'}
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-save"></i>
+                      현재 워크스페이스 업데이트
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+            
+            {/* 새로 저장 섹션 */}
+            <div className="mb-6 p-4 bg-white/5 rounded-xl">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.15em] mb-3">새 워크스페이스로 저장</h3>
               <input
                 type="text"
                 value={newWorkspaceName}
                 onChange={(e) => setNewWorkspaceName(e.target.value)}
                 placeholder="워크스페이스 이름"
                 className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white mb-3 focus:outline-none focus:border-white/30 text-sm"
-                onKeyPress={(e) => e.key === 'Enter' && !isSaving && handleSaveWorkspace()}
+                onKeyPress={(e) => e.key === 'Enter' && !isSaving && handleSaveNew()}
                 disabled={isSaving}
               />
               
@@ -539,33 +653,28 @@ const App: React.FC = () => {
               )}
               
               <button
-                onClick={handleSaveWorkspace}
+                onClick={handleSaveNew}
                 disabled={isSaving || !newWorkspaceName.trim()}
-                className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {isSaving ? (
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="flex items-center gap-2">
-                      <i className="fas fa-spinner fa-spin"></i>
-                      <span>업로드 중...</span>
-                    </div>
-                    {saveProgress && (
-                      <span className="text-xs opacity-70">{saveProgress}</span>
-                    )}
-                  </div>
+                {isSaving && !currentWorkspace ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin"></i>
+                    {saveProgress || '저장 중...'}
+                  </>
                 ) : (
                   <>
-                    <i className="fas fa-cloud-upload-alt"></i>
-                    클라우드에 저장
+                    <i className="fas fa-plus"></i>
+                    새로 저장
                   </>
                 )}
               </button>
             </div>
             
-            {/* 불러오기 섹션 */}
+            {/* 저장된 워크스페이스 목록 */}
             <div className="flex-1 overflow-hidden flex flex-col">
               <div className="flex justify-between items-center mb-3">
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.15em]">저장된 프로젝트</h3>
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-[0.15em]">저장된 워크스페이스</h3>
                 <button
                   onClick={refreshProjects}
                   disabled={isLoadingProjects}
@@ -584,7 +693,7 @@ const App: React.FC = () => {
                 <div className="flex-1 flex items-center justify-center text-center text-gray-600">
                   <div>
                     <i className="fas fa-folder-open text-3xl mb-2 opacity-30"></i>
-                    <p className="text-xs">저장된 프로젝트가 없습니다</p>
+                    <p className="text-xs">저장된 워크스페이스가 없습니다</p>
                   </div>
                 </div>
               ) : (
@@ -592,15 +701,24 @@ const App: React.FC = () => {
                   {state.workspaces.map((ws) => (
                     <div
                       key={ws.id}
-                      className="group relative"
+                      className={`group relative rounded-xl transition-all ${
+                        ws.id === state.currentWorkspaceId 
+                          ? 'bg-blue-500/20 border border-blue-500/30' 
+                          : 'bg-white/5 border border-white/5 hover:border-white/20'
+                      }`}
                     >
                       <button
                         onClick={() => loadWorkspace(ws)}
-                        className="w-full px-4 py-3 bg-white/5 hover:bg-white/15 rounded-xl text-left text-sm transition-all border border-white/5 hover:border-white/20"
+                        className="w-full px-4 py-3 text-left text-sm"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
-                            <div className="font-bold text-white truncate pr-8">{ws.name || 'Unnamed'}</div>
+                            <div className="font-bold text-white truncate pr-8 flex items-center gap-2">
+                              {ws.name || 'Unnamed'}
+                              {ws.id === state.currentWorkspaceId && (
+                                <span className="text-[10px] text-blue-400 font-normal">(현재)</span>
+                              )}
+                            </div>
                             <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
                               <span className="flex items-center gap-1">
                                 <i className="fas fa-user text-[10px]"></i>
@@ -626,8 +744,11 @@ const App: React.FC = () => {
                       
                       {/* 삭제 버튼 */}
                       <button
-                        onClick={(e) => handleDeleteWorkspace(ws, e)}
-                        className="absolute top-3 right-3 w-7 h-7 bg-red-500/0 hover:bg-red-500/80 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowDeleteConfirm(ws.id || null);
+                        }}
+                        className="absolute top-3 right-3 w-7 h-7 bg-transparent hover:bg-red-500/80 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
                         title="삭제"
                       >
                         <i className="fas fa-trash text-xs text-red-400 hover:text-white"></i>
@@ -636,6 +757,75 @@ const App: React.FC = () => {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 삭제 확인 모달 */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/80 z-[1000] flex items-center justify-center p-4">
+          <div className="glass p-6 rounded-2xl max-w-sm w-full">
+            <div className="text-center mb-6">
+              <i className="fas fa-exclamation-triangle text-4xl text-red-400 mb-4"></i>
+              <h3 className="text-lg font-bold mb-2">워크스페이스 삭제</h3>
+              <p className="text-sm text-gray-400">
+                이 워크스페이스를 삭제하시겠습니까?<br/>
+                이 작업은 되돌릴 수 없습니다.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => handleDeleteWorkspace(showDeleteConfirm)}
+                className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-all"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 저장하지 않음 경고 모달 */}
+      {showUnsavedWarning && (
+        <div className="fixed inset-0 bg-black/80 z-[1000] flex items-center justify-center p-4">
+          <div className="glass p-6 rounded-2xl max-w-sm w-full">
+            <div className="text-center mb-6">
+              <i className="fas fa-exclamation-circle text-4xl text-yellow-400 mb-4"></i>
+              <h3 className="text-lg font-bold mb-2">저장하지 않은 변경사항</h3>
+              <p className="text-sm text-gray-400">
+                저장하지 않은 변경사항이 있습니다.<br/>
+                계속하시겠습니까?
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowUnsavedWarning(false);
+                  setPendingAction(null);
+                }}
+                className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  setShowUnsavedWarning(false);
+                  if (pendingAction) {
+                    pendingAction();
+                    setPendingAction(null);
+                  }
+                }}
+                className="flex-1 py-3 bg-yellow-500 text-black font-bold rounded-xl hover:bg-yellow-400 transition-all"
+              >
+                저장 안 함
+              </button>
             </div>
           </div>
         </div>
