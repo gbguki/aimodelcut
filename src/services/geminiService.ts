@@ -269,3 +269,105 @@ export const generateFashionImage = async (
     throw error;
   }
 };
+
+/**
+ * Gemini API를 사용한 배경 제거 함수
+ */
+export const removeBackground = async (
+  imageUrl: string,
+  options?: {
+    preserveShadows?: boolean;
+    aspectRatio?: string;
+  }
+): Promise<string> => {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("Gemini API key is not configured. Please set VITE_GEMINI_API_KEY or VITE_API_KEY in your .env file.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  try {
+    // 이미지를 base64로 변환
+    const { base64, mimeType } = await urlToBase64(imageUrl);
+
+    const systemInstruction = `
+      You are a professional image editing AI specializing in precise background removal for fashion and beauty product photography.
+      
+      [TASK]: Remove the background from the provided image while preserving the subject perfectly.
+      
+      [REQUIREMENTS]:
+      1. Keep the main subject (model and product) completely intact with ALL details
+      2. Remove ALL background elements completely - leave only the subject
+      3. Create a clean, transparent background (PNG format)
+      4. Maintain sharp, natural edges especially around:
+         - Hair strands and flyaways
+         - Clothing fabric edges
+         - Product details
+         - Fingers and hands
+      5. ${options?.preserveShadows !== false ? 'Preserve natural shadows cast by the subject' : 'Remove all shadows'}
+      6. Do NOT alter the subject's appearance, pose, composition, colors, or lighting
+      7. Maintain the exact same resolution and aspect ratio
+      
+      [QUALITY]: Professional studio-quality cutout suitable for e-commerce and advertising.
+      
+      [OUTPUT]: Return ONLY the image with transparent background. No text response needed.
+    `;
+
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-3-pro-image-preview',
+      contents: {
+        parts: [
+          { 
+            text: "Remove the background from this image completely, keeping only the main subject with a transparent background. Preserve all fine details like hair and edges." 
+          },
+          {
+            inlineData: {
+              data: base64,
+              mimeType: mimeType
+            }
+          }
+        ]
+      },
+      config: {
+        systemInstruction: systemInstruction,
+        imageConfig: {
+          aspectRatio: options?.aspectRatio || '1:1',
+          imageSize: '1024'
+        }
+      }
+    });
+
+    // 생성된 이미지 추출
+    if (response.candidates && response.candidates.length > 0) {
+      const candidate = response.candidates[0];
+      const contentParts = candidate?.content?.parts;
+      
+      if (contentParts) {
+        for (const part of contentParts) {
+          if (part.inlineData) {
+            // PNG 형식으로 반환 (투명 배경 지원)
+            return `data:image/png;base64,${part.inlineData.data}`;
+          }
+        }
+      }
+    }
+
+    throw new Error("배경 제거에 실패했습니다.");
+    
+  } catch (error: any) {
+    console.error("Background removal error:", error);
+    
+    // 에러 메시지 개선
+    if (error.message?.includes('API key')) {
+      throw new Error("API 키가 설정되지 않았습니다.");
+    } else if (error.message?.includes('quota')) {
+      throw new Error("API 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요.");
+    } else if (error.message?.includes('image')) {
+      throw new Error("이미지를 처리할 수 없습니다. 다른 이미지로 시도해주세요.");
+    }
+    
+    throw new Error("배경 제거 중 오류가 발생했습니다: " + error.message);
+  }
+};
