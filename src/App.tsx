@@ -82,6 +82,21 @@ const App: React.FC = () => {
     }
   }, [saveSuccess]);
 
+  // 탭 닫기/새로고침 시 경고
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // 저장하지 않은 변경사항이 있고, 작업 중인 콘텐츠가 있을 때만 경고
+      if (hasUnsavedChanges && (state.baseImage || state.history.length > 0)) {
+        e.preventDefault();
+        e.returnValue = ''; // Chrome에서 필요
+        return '저장하지 않은 변경사항이 있습니다. 페이지를 떠나시겠습니까?';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges, state.baseImage, state.history.length]);
+
   const currentResult = state.activeVersionIndex >= 0 ? state.history[state.activeVersionIndex] : null;
 
   // 현재 워크스페이스 정보 가져오기
@@ -570,8 +585,14 @@ const App: React.FC = () => {
                     />
                   </div>
                   {result.prompt && (
-                    <div className="p-2 bg-black/40 text-xs text-gray-400 truncate">
-                      {result.prompt}
+                    <div className="relative group/prompt">
+                      <div className="p-2 bg-black/40 text-xs text-gray-400 truncate">
+                        {result.prompt}
+                      </div>
+                      {/* 호버 시 전체 프롬프트 표시 */}
+                      <div className="absolute bottom-full left-0 right-0 mb-1 p-2 bg-black/95 border border-white/20 rounded-lg text-xs text-gray-300 opacity-0 invisible group-hover/prompt:opacity-100 group-hover/prompt:visible transition-all z-10 whitespace-normal">
+                        {result.prompt}
+                      </div>
                     </div>
                   )}
                 </button>
@@ -807,31 +828,56 @@ const App: React.FC = () => {
               <h3 className="text-lg font-bold mb-2">저장하지 않은 변경사항</h3>
               <p className="text-sm text-gray-400">
                 저장하지 않은 변경사항이 있습니다.<br/>
-                계속하시겠습니까?
+                어떻게 하시겠습니까?
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-2">
+              {/* 저장 버튼 - 현재 워크스페이스가 있으면 바로 저장, 없으면 모달 열기 */}
               <button
-                onClick={() => {
-                  setShowUnsavedWarning(false);
-                  setPendingAction(null);
-                }}
-                className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all"
-              >
-                취소
-              </button>
-              <button
-                onClick={() => {
-                  setShowUnsavedWarning(false);
-                  if (pendingAction) {
-                    pendingAction();
-                    setPendingAction(null);
+                onClick={async () => {
+                  if (state.currentWorkspaceId && currentWorkspace) {
+                    // 현재 워크스페이스 업데이트
+                    setShowUnsavedWarning(false);
+                    await handleUpdateCurrent();
+                    if (pendingAction) {
+                      pendingAction();
+                      setPendingAction(null);
+                    }
+                  } else {
+                    // 워크스페이스 모달 열기
+                    setShowUnsavedWarning(false);
+                    setShowWorkspaceModal(true);
+                    // pendingAction은 유지 - 저장 후 실행되도록
                   }
                 }}
-                className="flex-1 py-3 bg-yellow-500 text-black font-bold rounded-xl hover:bg-yellow-400 transition-all"
+                className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
               >
-                저장 안 함
+                <i className="fas fa-save"></i>
+                {state.currentWorkspaceId ? '저장 후 진행' : '저장하기'}
               </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowUnsavedWarning(false);
+                    setPendingAction(null);
+                  }}
+                  className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUnsavedWarning(false);
+                    if (pendingAction) {
+                      pendingAction();
+                      setPendingAction(null);
+                    }
+                  }}
+                  className="flex-1 py-3 bg-yellow-500 text-black font-bold rounded-xl hover:bg-yellow-400 transition-all"
+                >
+                  저장 안 함
+                </button>
+              </div>
             </div>
           </div>
         </div>
