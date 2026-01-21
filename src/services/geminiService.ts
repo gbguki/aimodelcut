@@ -364,11 +364,11 @@ export const replaceBackgroundWithGreen = async (
 };
 
 /**
- * 2단계: Canvas를 사용하여 녹색 배경을 투명하게 변환
+ * 2단계: Canvas를 사용하여 녹색 배경을 투명하게 변환 (개선된 알고리즘)
  */
 export const removeGreenScreen = async (
   imageUrl: string,
-  tolerance: number = 50
+  tolerance: number = 40
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -393,20 +393,81 @@ export const removeGreenScreen = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
       
-      // 녹색 제거 (Chroma Key)
+      // 1차: 녹색 배경 제거 및 Green Spill 제거
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
+        const a = data[i + 3];
         
-        // 녹색 판별: G값이 높고 R, B값이 낮은 경우
-        const isGreen = g > 100 && r < tolerance && b < tolerance && Math.abs(g - 255) < tolerance;
+        if (a === 0) continue; // 이미 투명한 픽셀은 건너뛰기
         
-        // 추가 체크: 상대적으로 G가 R, B보다 훨씬 큰 경우
-        const greenDominant = g > (r + b) * 1.5;
+        // 녹색 판별 (더 정밀한 기준)
+        const greenStrength = g - Math.max(r, b);
+        const isGreen = greenStrength > 50 && g > 100;
         
-        if (isGreen || greenDominant) {
-          data[i + 3] = 0; // 완전 투명
+        // 밝은 녹색 (배경)
+        const isBrightGreen = g > 200 && r < 100 && b < 100;
+        
+        if (isGreen || isBrightGreen) {
+          // 완전한 녹색 배경은 투명하게
+          if (greenStrength > 100 || isBrightGreen) {
+            data[i + 3] = 0;
+          } else {
+            // 경계 부분: 부분 투명 + Green Spill 제거
+            const alpha = Math.max(0, 255 - greenStrength * 2.5);
+            data[i + 3] = alpha;
+            
+            // Green Spill 제거: 녹색 성분을 R/B의 평균으로 대체
+            if (greenStrength > 20) {
+              const avgRB = (r + b) / 2;
+              data[i + 1] = Math.min(255, avgRB + (g - avgRB) * 0.3);
+            }
+          }
+        } else if (greenStrength > 20 && greenStrength < 50) {
+          // 약한 녹색 tint 제거 (피부 경계선 등)
+          const avgRB = (r + b) / 2;
+          data[i + 1] = Math.min(255, avgRB + (g - avgRB) * 0.5);
+        }
+      }
+      
+      // 2차: 경계선 정리 (Despill 및 알파 블렌딩)
+      const tempData = new Uint8ClampedArray(data);
+      
+      for (let y = 1; y < canvas.height - 1; y++) {
+        for (let x = 1; x < canvas.width - 1; x++) {
+          const idx = (y * canvas.width + x) * 4;
+          
+          if (data[idx + 3] > 0 && data[idx + 3] < 255) {
+            // 경계 픽셀 찾기
+            const neighbors = [
+              ((y - 1) * canvas.width + x) * 4,     // 상
+              ((y + 1) * canvas.width + x) * 4,     // 하
+              (y * canvas.width + (x - 1)) * 4,     // 좌
+              (y * canvas.width + (x + 1)) * 4,     // 우
+            ];
+            
+            let solidCount = 0;
+            let transparentCount = 0;
+            
+            neighbors.forEach(nIdx => {
+              if (tempData[nIdx + 3] === 255) solidCount++;
+              if (tempData[nIdx + 3] === 0) transparentCount++;
+            });
+            
+            // 경계선 픽셀의 녹색 제거 강화
+            if (solidCount > 0 && transparentCount > 0) {
+              const r = data[idx];
+              const g = data[idx + 1];
+              const b = data[idx + 2];
+              
+              // 녹색이 여전히 강하면 제거
+              if (g > Math.max(r, b) + 15) {
+                const avgRB = (r + b) / 2;
+                data[idx + 1] = avgRB;
+              }
+            }
+          }
         }
       }
       
