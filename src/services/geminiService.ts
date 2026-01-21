@@ -123,17 +123,28 @@ export const generateFashionImage = async (
   `;
 
   const hasBaseImage = baseImage !== null;
+  const hasPreviousImage = !!config.previousImage;
   const systemInstruction = hasBaseImage ? systemInstructionWithBase : systemInstructionNoBase;
 
+  // 이전 이미지가 있으면 수정 모드
+  const editInstruction = hasPreviousImage ? `
+    [EDIT MODE]: A previous generated image is provided. You MUST use it as the base and apply ONLY the requested changes.
+    - KEEP the same model, pose, composition, lighting, and overall style
+    - ONLY modify what is specifically requested in the prompt
+    - Do NOT regenerate from scratch - this is an EDIT, not a new creation
+  ` : '';
+
   const userPromptWithBase = `
+    ${editInstruction}
     INSTRUCTION: Integrate the provided products into the scene.
     BEHAVIOR: If small items are present, make the model hold them as if in a professional beauty commercial. 
     SPECIFIC REQUESTS: ${config.prompt || 'Apply products naturally and maintain the overall aesthetic.'}
   `;
 
   const userPromptNoBase = `
-    INSTRUCTION: Create a professional model shot featuring the provided product(s).
-    BEHAVIOR: Analyze the product type and generate an appropriate model and setting.
+    ${editInstruction}
+    INSTRUCTION: ${hasPreviousImage ? 'Edit the previous image based on the request.' : 'Create a professional model shot featuring the provided product(s).'}
+    BEHAVIOR: ${hasPreviousImage ? 'Maintain the model and composition from the previous image, only apply the requested changes.' : 'Analyze the product type and generate an appropriate model and setting.'}
     - For cosmetics: Create a beauty campaign style shot with the model holding or using the product.
     - For accessories: Create a fashion editorial style shot with the model wearing/holding the item.
     - For clothing: Create a lookbook style shot with the model wearing the item.
