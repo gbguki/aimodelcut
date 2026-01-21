@@ -99,7 +99,10 @@ export const generateFashionImage = async (
     [CORE CONCEPT]: Every image MUST include a human model. This is a "Model Cut" service.
     
     [FIRST]: Identify the product category:
-    - BEAUTY: Nail, lip, skincare, makeup, fragrance, hair products, cosmetics
+    - BEAUTY: All cosmetics, skincare, bodycare, haircare, fragrance, and beauty tools/devices
+      (Examples: makeup, lip, nail, skincare, serum, cream, lotion, body oil, body scrub, sunscreen, 
+       hand cream, foot cream, hair styling, shampoo, fragrance, perfume, 
+       beauty tools like gua sha, rollers, brushes, LED masks, beauty devices, etc.)
     - FASHION: Clothing, bags, shoes, jewelry, watches, eyewear, accessories
     
     ============================================
@@ -112,13 +115,13 @@ export const generateFashionImage = async (
     - Fresh, youthful, clean aesthetic
     - Dewy, glowing skin
     
-    BEAUTY MODEL SHOTS:
-    - NAIL: Model's face + hand near face/chin showing nails
-    - LIP: Model's face with lips as focus
-    - SKINCARE: Model with glowing skin, may hold product
-    - MAKEUP: Fresh-faced model showcasing the look
-    - FRAGRANCE: Soft, romantic setting, product placed naturally nearby
+    BEAUTY MODEL SHOTS - Adapt based on product:
+    - FACE PRODUCTS: Model's face as focus
+    - BODY PRODUCTS: Show appropriate body part (back, legs, arms, etc.) with model
+    - LIP/NAIL: Close-up with face visible
     - HAIR: Model with beautiful hair
+    - FRAGRANCE: Soft, romantic setting
+    - TOOLS/DEVICES: Model using it on the appropriate area (face tool = face, body tool = body)
     
     AVOID for Beauty:
     - Dark, moody backgrounds
