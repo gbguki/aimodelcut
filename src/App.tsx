@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import ImageUploader from './components/ImageUploader';
-import { generateFashionImage } from './services/geminiService';
+import { generateFashionImage, removeBackground } from './services/geminiService';
 import { fetchProjects, saveProject, updateProject, deleteProject } from './services/firebaseService';
 import { AppState, AspectRatio, ImageFile, GenerationResult, Workspace } from './types';
-import { removeBackground } from '@imgly/background-removal';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -43,6 +42,7 @@ const App: React.FC = () => {
   // 다운로드 관련 상태
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  const [bgRemovalProgress, setBgRemovalProgress] = useState<string>('');
 
   const timelineEndRef = useRef<HTMLDivElement>(null);
 
@@ -90,10 +90,9 @@ const App: React.FC = () => {
   // 탭 닫기/새로고침 시 경고
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // 저장하지 않은 변경사항이 있고, 작업 중인 콘텐츠가 있을 때만 경고
       if (hasUnsavedChanges && (state.baseImage || state.history.length > 0)) {
         e.preventDefault();
-        e.returnValue = ''; // Chrome에서 필요
+        e.returnValue = '';
         return '저장하지 않은 변경사항이 있습니다. 페이지를 떠나시겠습니까?';
       }
     };
@@ -129,7 +128,6 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // baseImage가 없으면 null로 전달 (모델샷 자동 생성)
       const result = await generateFashionImage(state.baseImage, state.productImages, {
         aspectRatio,
         prompt,
@@ -390,32 +388,42 @@ const App: React.FC = () => {
     }
   };
 
-  // 이미지 다운로드 (배경 제거)
+  // 이미지 다운로드 (배경 제거) - Gemini API 사용
   const handleDownloadNoBg = async () => {
     if (!currentResult) return;
     
     setIsRemovingBg(true);
+    setBgRemovalProgress('배경 제거 준비 중...');
+    
     try {
-      // 이미지 URL을 blob으로 변환
-      const response = await fetch(currentResult.imageUrl);
-      const blob = await response.blob();
+      setBgRemovalProgress('Gemini API로 배경 제거 중...');
       
-      // 배경 제거
-      const removedBgBlob = await removeBackground(blob);
+      // Gemini API로 배경 제거
+      const noBgImageUrl = await removeBackground(currentResult.imageUrl, {
+        preserveShadows: true,
+        aspectRatio: currentResult.aspectRatio === AspectRatio.SQUARE ? '1:1' : 
+                     currentResult.aspectRatio === AspectRatio.PORTRAIT_4_5 ? '3:4' : '9:16'
+      });
+      
+      setBgRemovalProgress('다운로드 준비 중...');
       
       // 다운로드
-      const url = URL.createObjectURL(removedBgBlob);
       const link = document.createElement('a');
-      link.href = url;
+      link.href = noBgImageUrl;
       link.download = `modelcut_nobg_${Date.now()}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      
       setShowDownloadOptions(false);
-    } catch (error) {
+      setBgRemovalProgress('');
+    } catch (error: any) {
       console.error('Background removal failed:', error);
-      setState(prev => ({ ...prev, error: '배경 제거에 실패했습니다.' }));
+      setState(prev => ({ 
+        ...prev, 
+        error: error.message || '배경 제거에 실패했습니다. Gemini API 키를 확인해주세요.' 
+      }));
+      setBgRemovalProgress('');
     } finally {
       setIsRemovingBg(false);
     }
@@ -531,7 +539,6 @@ const App: React.FC = () => {
                   onUpload={(files: ImageFile[]) => {
                     if (files.length > 0) {
                       setState(prev => {
-                        // 최대 4개까지만 추가
                         const remainingSlots = 4 - prev.productImages.length;
                         const filesToAdd = files.slice(0, remainingSlots);
                         return { 
@@ -642,7 +649,7 @@ const App: React.FC = () => {
                       
                       {/* 다운로드 옵션 드롭다운 */}
                       {showDownloadOptions && (
-                        <div className="absolute bottom-full right-0 mb-2 bg-black/95 border border-white/20 rounded-xl overflow-hidden min-w-[180px] backdrop-blur-sm">
+                        <div className="absolute bottom-full right-0 mb-2 bg-black/95 border border-white/20 rounded-xl overflow-hidden min-w-[200px] backdrop-blur-sm">
                           <button
                             onClick={handleDownloadOriginal}
                             className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/10 transition-all flex items-center gap-3"
@@ -653,18 +660,30 @@ const App: React.FC = () => {
                           <button
                             onClick={handleDownloadNoBg}
                             disabled={isRemovingBg}
-                            className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/10 transition-all flex items-center gap-3 disabled:opacity-50"
+                            className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/10 transition-all flex flex-col gap-1 disabled:opacity-50"
                           >
-                            {isRemovingBg ? (
-                              <>
-                                <i className="fas fa-spinner fa-spin text-green-400"></i>
-                                배경 제거 중...
-                              </>
-                            ) : (
-                              <>
-                                <i className="fas fa-cut text-green-400"></i>
-                                누끼 다운로드
-                              </>
+                            <div className="flex items-center gap-3">
+                              {isRemovingBg ? (
+                                <>
+                                  <i className="fas fa-spinner fa-spin text-green-400"></i>
+                                  <span>배경 제거 중...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <i className="fas fa-magic text-green-400"></i>
+                                  <span>누끼 다운로드</span>
+                                </>
+                              )}
+                            </div>
+                            {bgRemovalProgress && (
+                              <div className="text-xs text-gray-400 pl-7">
+                                {bgRemovalProgress}
+                              </div>
+                            )}
+                            {!isRemovingBg && (
+                              <div className="text-xs text-gray-500 pl-7">
+                                Gemini AI 배경 제거
+                              </div>
                             )}
                           </button>
                         </div>
@@ -957,11 +976,9 @@ const App: React.FC = () => {
               </p>
             </div>
             <div className="flex flex-col gap-2">
-              {/* 저장 버튼 - 현재 워크스페이스가 있으면 바로 저장, 없으면 모달 열기 */}
               <button
                 onClick={async () => {
                   if (state.currentWorkspaceId && currentWorkspace) {
-                    // 현재 워크스페이스 업데이트
                     setShowUnsavedWarning(false);
                     await handleUpdateCurrent();
                     if (pendingAction) {
@@ -969,10 +986,8 @@ const App: React.FC = () => {
                       setPendingAction(null);
                     }
                   } else {
-                    // 워크스페이스 모달 열기
                     setShowUnsavedWarning(false);
                     setShowWorkspaceModal(true);
-                    // pendingAction은 유지 - 저장 후 실행되도록
                   }
                 }}
                 className="w-full py-3 bg-blue-500 text-white font-bold rounded-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2"
