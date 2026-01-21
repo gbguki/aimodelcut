@@ -364,7 +364,7 @@ export const replaceBackgroundWithGreen = async (
 };
 
 /**
- * 2단계: Canvas를 사용하여 녹색 배경을 투명하게 변환 (개선된 알고리즘)
+ * 2단계: Canvas를 사용하여 녹색 배경을 투명하게 변환 (강력한 Green Spill 제거)
  */
 export const removeGreenScreen = async (
   imageUrl: string,
@@ -393,80 +393,93 @@ export const removeGreenScreen = async (
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
       
-      // 1차: 녹색 배경 제거 및 Green Spill 제거
+      // 1차: 녹색 배경 완전 제거
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         const a = data[i + 3];
         
-        if (a === 0) continue; // 이미 투명한 픽셀은 건너뛰기
+        if (a === 0) continue;
         
-        // 녹색 판별 (더 정밀한 기준)
+        // 녹색 강도 계산
         const greenStrength = g - Math.max(r, b);
-        const isGreen = greenStrength > 50 && g > 100;
+        const avgRB = (r + b) / 2;
+        const greenRatio = g / (avgRB + 1);
         
-        // 밝은 녹색 (배경)
-        const isBrightGreen = g > 200 && r < 100 && b < 100;
-        
-        if (isGreen || isBrightGreen) {
-          // 완전한 녹색 배경은 투명하게
-          if (greenStrength > 100 || isBrightGreen) {
-            data[i + 3] = 0;
-          } else {
-            // 경계 부분: 부분 투명 + Green Spill 제거
-            const alpha = Math.max(0, 255 - greenStrength * 2.5);
-            data[i + 3] = alpha;
-            
-            // Green Spill 제거: 녹색 성분을 R/B의 평균으로 대체
-            if (greenStrength > 20) {
-              const avgRB = (r + b) / 2;
-              data[i + 1] = Math.min(255, avgRB + (g - avgRB) * 0.3);
-            }
-          }
-        } else if (greenStrength > 20 && greenStrength < 50) {
-          // 약한 녹색 tint 제거 (피부 경계선 등)
-          const avgRB = (r + b) / 2;
-          data[i + 1] = Math.min(255, avgRB + (g - avgRB) * 0.5);
+        // 순수 녹색 배경 (완전 투명)
+        if (greenStrength > 80 || (g > 180 && greenRatio > 1.8)) {
+          data[i + 3] = 0;
+        }
+        // 중간 녹색 (부분 투명 + Despill)
+        else if (greenStrength > 40 || (g > 120 && greenRatio > 1.4)) {
+          const alpha = Math.max(0, 255 - greenStrength * 3);
+          data[i + 3] = alpha;
+          
+          // Green 채널을 R/B 평균으로 완전 대체
+          data[i + 1] = avgRB;
+        }
+        // 약한 녹색 tint (Despill만)
+        else if (greenStrength > 15 || greenRatio > 1.2) {
+          data[i + 1] = avgRB;
         }
       }
       
-      // 2차: 경계선 정리 (Despill 및 알파 블렌딩)
+      // 2차: 경계선 3x3 커널 처리 (강력한 Despill)
       const tempData = new Uint8ClampedArray(data);
       
       for (let y = 1; y < canvas.height - 1; y++) {
         for (let x = 1; x < canvas.width - 1; x++) {
           const idx = (y * canvas.width + x) * 4;
+          const alpha = data[idx + 3];
           
-          if (data[idx + 3] > 0 && data[idx + 3] < 255) {
-            // 경계 픽셀 찾기
-            const neighbors = [
-              ((y - 1) * canvas.width + x) * 4,     // 상
-              ((y + 1) * canvas.width + x) * 4,     // 하
-              (y * canvas.width + (x - 1)) * 4,     // 좌
-              (y * canvas.width + (x + 1)) * 4,     // 우
-            ];
+          // 불투명하거나 반투명 픽셀만 처리
+          if (alpha > 0) {
+            const r = tempData[idx];
+            const g = tempData[idx + 1];
+            const b = tempData[idx + 2];
             
-            let solidCount = 0;
-            let transparentCount = 0;
+            // 주변 8개 픽셀 검사
+            let hasTransparentNeighbor = false;
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const nIdx = ((y + dy) * canvas.width + (x + dx)) * 4;
+                if (tempData[nIdx + 3] < 128) {
+                  hasTransparentNeighbor = true;
+                  break;
+                }
+              }
+              if (hasTransparentNeighbor) break;
+            }
             
-            neighbors.forEach(nIdx => {
-              if (tempData[nIdx + 3] === 255) solidCount++;
-              if (tempData[nIdx + 3] === 0) transparentCount++;
-            });
-            
-            // 경계선 픽셀의 녹색 제거 강화
-            if (solidCount > 0 && transparentCount > 0) {
-              const r = data[idx];
-              const g = data[idx + 1];
-              const b = data[idx + 2];
+            // 경계 픽셀의 녹색 완전 제거
+            if (hasTransparentNeighbor) {
+              const avgRB = (r + b) / 2;
+              const greenStrength = g - Math.max(r, b);
               
-              // 녹색이 여전히 강하면 제거
-              if (g > Math.max(r, b) + 15) {
-                const avgRB = (r + b) / 2;
-                data[idx + 1] = avgRB;
+              // 녹색이 조금이라도 강하면 제거
+              if (greenStrength > 5) {
+                data[idx + 1] = Math.min(avgRB, g);
               }
             }
+          }
+        }
+      }
+      
+      // 3차: 미세한 녹색 tint 최종 제거 (전체 이미지)
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] > 0) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          
+          // 여전히 G가 평균보다 높으면 보정
+          const avgRB = (r + b) / 2;
+          if (g > avgRB + 10) {
+            // 녹색을 줄이되 자연스러운 색상 유지
+            const excess = g - avgRB;
+            data[i + 1] = avgRB + Math.min(excess * 0.3, 10);
           }
         }
       }
