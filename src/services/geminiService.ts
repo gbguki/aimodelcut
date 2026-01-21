@@ -94,32 +94,30 @@ export const generateFashionImage = async (
   `;
 
   const systemInstructionNoBase = `
-    You are a professional AI Creative Director for a high-end fashion and beauty studio.
+    You are a professional AI Creative Director for "ModelCut AI" - a service that creates MODEL SHOTS for product advertisements.
     
-    [TASK]: Generate a professional advertisement/campaign image featuring the provided product(s).
+    [CORE CONCEPT]: Every image MUST include a human model. This is a "Model Cut" service.
     
-    [YOUR ROLE]:
-    1. ANALYZE the product type (cosmetics, fashion, accessories, etc.)
-    2. RESEARCH mentally what kinds of model shots are commonly used for this product category in real advertisements
-    3. CREATE a visually compelling, commercially viable image that would fit in a real brand campaign
+    [TASK]: Generate a professional MODEL SHOT (advertisement image with a model) featuring the provided product(s).
+    
+    [MODEL SHOT PRINCIPLES]:
+    1. A MODEL must always be present in the image
+    2. The model should naturally showcase the product
+    3. Study how real brands advertise this type of product WITH MODELS
+    
+    [STYLE GUIDANCE BY PRODUCT TYPE]:
+    - NAIL/HAND PRODUCTS: Model's face visible with hand naturally positioned near face/chin, showing nails elegantly (like K-beauty nail ads)
+    - LIP PRODUCTS: Model's face with lips as focus, may hold product or just show applied result
+    - SKINCARE/COSMETICS: Model holding or applying the product, glowing skin
+    - FASHION ITEMS: Model wearing/holding the item in editorial style
+    - FRAGRANCE: Model in elegant pose with or near the bottle
     
     [CREATIVE FREEDOM]:
-    - You decide the best composition, angle, and style
-    - Consider various advertising approaches for this product category:
-      * Product packaging prominently displayed with model
-      * Product being used/applied by model
-      * Artistic close-up focusing on the result
-      * Lifestyle shot showing the product in context
-      * Editorial/fashion style interpretation
+    - Choose the best pose, angle, and composition for this specific product
+    - The model can be showing the product applied, holding it, or both
+    - Use your knowledge of real advertisement styles for this category
     
-    [QUALITY STANDARDS]:
-    - Professional 8K photography quality
-    - Appropriate lighting for the product category
-    - Composition that highlights the product's appeal
-    - Model (if included) should complement, not overshadow the product
-    - The image should look like it belongs in a real brand campaign or magazine
-    
-    [IMPORTANT]: Choose the advertising style that best showcases THIS specific product. Different products within the same category may need different approaches.
+    [QUALITY]: Professional 8K photography, magazine/campaign quality, luxury brand aesthetic
   `;
 
   const hasBaseImage = baseImage !== null;
@@ -143,11 +141,11 @@ export const generateFashionImage = async (
 
   const userPromptNoBase = `
     ${editInstruction}
-    INSTRUCTION: ${hasPreviousImage ? 'Edit the previous image based on the request.' : 'Create a professional advertisement image for the provided product(s).'}
+    INSTRUCTION: ${hasPreviousImage ? 'Edit the previous image based on the request.' : 'Create a MODEL SHOT - an advertisement image featuring a MODEL showcasing the provided product(s).'}
     
-    BEHAVIOR: ${hasPreviousImage ? 'Maintain the model and composition from the previous image, only apply the requested changes.' : 'Analyze what kind of product this is and create an appropriate advertisement-style image. Use your knowledge of how this product category is typically advertised.'}
+    BEHAVIOR: ${hasPreviousImage ? 'Maintain the model and composition from the previous image, only apply the requested changes.' : 'A human model MUST be in the image. Analyze the product type and create an appropriate model shot like real brand advertisements use.'}
     
-    SPECIFIC REQUESTS: ${config.prompt || 'Create a compelling advertisement image that best showcases this product.'}
+    SPECIFIC REQUESTS: ${config.prompt || 'Create a professional model shot that naturally showcases this product.'}
   `;
 
   const userPrompt = hasBaseImage ? userPromptWithBase : userPromptNoBase;
