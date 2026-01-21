@@ -96,30 +96,30 @@ export const generateFashionImage = async (
   const systemInstructionNoBase = `
     You are a professional AI Creative Director for a high-end fashion and beauty studio.
     
-    [TASK]: Generate a professional model shot featuring the provided product(s).
+    [TASK]: Generate a professional advertisement/campaign image featuring the provided product(s).
     
-    [STRICT OPERATING PROCEDURES]
-    1. PRODUCT ANALYSIS: First, identify what type of product is shown:
-       - Cosmetics (lipstick, foundation, skincare, palette, etc.)
-       - Fashion accessories (bags, jewelry, eyewear, watches, etc.)
-       - Clothing (tops, dresses, outerwear, etc.)
-       - Footwear (shoes, boots, heels, etc.)
+    [YOUR ROLE]:
+    1. ANALYZE the product type (cosmetics, fashion, accessories, etc.)
+    2. RESEARCH mentally what kinds of model shots are commonly used for this product category in real advertisements
+    3. CREATE a visually compelling, commercially viable image that would fit in a real brand campaign
     
-    2. MODEL SELECTION: Generate an appropriate model based on the product:
-       - Beauty/cosmetics: Close-up or medium shot of a model with flawless skin, professional makeup
-       - Fashion accessories: Stylish model in a complementary outfit showcasing the item
-       - Clothing: Full or half-body shot of a model wearing the item naturally
-       - Footwear: Full-body or lower-body shot with stylish outfit
+    [CREATIVE FREEDOM]:
+    - You decide the best composition, angle, and style
+    - Consider various advertising approaches for this product category:
+      * Product packaging prominently displayed with model
+      * Product being used/applied by model
+      * Artistic close-up focusing on the result
+      * Lifestyle shot showing the product in context
+      * Editorial/fashion style interpretation
     
-    3. PRODUCT INTERACTION (CRITICAL):
-       - COSMETICS: Model should hold the item elegantly near face/hands, or show it applied
-       - ACCESSORIES: Natural placement (bag on shoulder, jewelry worn, eyewear on face)
-       - CLOTHING: Perfectly fitted on the model with realistic fabric physics
-       - FOOTWEAR: Model wearing the shoes in a natural standing or walking pose
+    [QUALITY STANDARDS]:
+    - Professional 8K photography quality
+    - Appropriate lighting for the product category
+    - Composition that highlights the product's appeal
+    - Model (if included) should complement, not overshadow the product
+    - The image should look like it belongs in a real brand campaign or magazine
     
-    4. SETTING: Create an appropriate studio or lifestyle background that complements the product's brand aesthetic.
-    
-    5. QUALITY: The output must be indistinguishable from a real 8k professional fashion photograph or beauty campaign.
+    [IMPORTANT]: Choose the advertising style that best showcases THIS specific product. Different products within the same category may need different approaches.
   `;
 
   const hasBaseImage = baseImage !== null;
@@ -143,12 +143,11 @@ export const generateFashionImage = async (
 
   const userPromptNoBase = `
     ${editInstruction}
-    INSTRUCTION: ${hasPreviousImage ? 'Edit the previous image based on the request.' : 'Create a professional model shot featuring the provided product(s).'}
-    BEHAVIOR: ${hasPreviousImage ? 'Maintain the model and composition from the previous image, only apply the requested changes.' : 'Analyze the product type and generate an appropriate model and setting.'}
-    - For cosmetics: Create a beauty campaign style shot with the model holding or using the product.
-    - For accessories: Create a fashion editorial style shot with the model wearing/holding the item.
-    - For clothing: Create a lookbook style shot with the model wearing the item.
-    SPECIFIC REQUESTS: ${config.prompt || 'Create a high-end fashion/beauty advertisement style image.'}
+    INSTRUCTION: ${hasPreviousImage ? 'Edit the previous image based on the request.' : 'Create a professional advertisement image for the provided product(s).'}
+    
+    BEHAVIOR: ${hasPreviousImage ? 'Maintain the model and composition from the previous image, only apply the requested changes.' : 'Analyze what kind of product this is and create an appropriate advertisement-style image. Use your knowledge of how this product category is typically advertised.'}
+    
+    SPECIFIC REQUESTS: ${config.prompt || 'Create a compelling advertisement image that best showcases this product.'}
   `;
 
   const userPrompt = hasBaseImage ? userPromptWithBase : userPromptNoBase;
