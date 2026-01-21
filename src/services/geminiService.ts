@@ -108,7 +108,7 @@ export const generateFashionImage = async (
 [SECOND - BEAUTY SUBCATEGORY]:
 - FACE / SKIN / BODY / HAIR / FRAGRANCE / TOOLS-DEVICES
 - LIP
-- NAIL / HAND BEAUTY (nail art, gel nails, nail polish, nail stickers, hand & cuticle products)
+- NAIL / HAND BEAUTY (nail art, gel nails, nail polish, nail stickers, press-on nails, cuticle oil, hand & nail products)
 
 ============================================
 [IF BEAUTY PRODUCT - USE K-BEAUTY STYLE]:
@@ -129,6 +129,12 @@ BEAUTY MODEL SHOTS - Adapt based on product:
 
 - LIP: Close-up with face visible, lip area in focus, natural K-beauty makeup
 
+AVOID for Beauty (general):
+- Dark, moody backgrounds
+- Overly dramatic Western luxury style
+- Heavy, dramatic makeup
+- Over-the-top glamorous poses
+
 ============================================
 [IF NAIL / HAND BEAUTY - USE "PINTEREST NAIL EDITORIAL" STYLE]:
 ============================================
@@ -136,12 +142,12 @@ BEAUTY MODEL SHOTS - Adapt based on product:
 - Composition: close-up of hands with nails occupying a large portion of the frame.
 - Lighting: bright natural daylight, soft shadows, high-key clean look.
 - Background: minimal, airy, clean (off-white, cream, light beige, light gray). Lifestyle context is allowed but subtle.
-- Aesthetic: realistic Pinterest-style nail inspo photo (editorial snapshot 느낌), not a dramatic studio campaign.
+- Aesthetic: realistic Pinterest-style nail inspo photo (editorial snapshot feel), not a dramatic studio campaign.
 - Focus: shallow depth of field, nails in sharp focus, background softly blurred.
 - Hands realism: correct anatomy, natural finger proportions, realistic skin texture. Nails must be crisp and detailed.
 - Product interaction:
   - If a nail product exists (bottle, brush, sticker sheet, cuticle oil): the model must hold it with a delicate grasp/pinch near the hands so it feels usable and natural.
-  - If the product is the nail design itself: no need to force a bottle; nails remain the hero.
+  - If the product is the nail design itself: do not force a bottle; nails remain the hero.
 - Do NOT require the face for nail shots. If any face appears, it must not dominate the frame; nails stay the focus.
 
 AVOID for Nail/Hand Beauty:
@@ -151,11 +157,39 @@ AVOID for Nail/Hand Beauty:
 - Any deformed hands, extra fingers, warped nails, blurry nail details
 - Wide shots where nails are too small to read
 
-AVOID for Beauty (general):
-- Dark, moody backgrounds
-- Overly dramatic Western luxury style
-- Heavy, dramatic makeup
-- Over-the-top glamorous poses
+[NAIL SET MAPPING & ORDERING - CRITICAL]
+When the reference image shows multiple nail tips (press-on set / 10pcs / 20pcs) with distinct designs:
+You must preserve the exact nail-to-finger mapping. Do NOT shuffle designs for aesthetics.
+
+STEP 1) DETECT LAYOUT TYPE (priority):
+A) Explicit layout: two rows of five, or clear 5-per-hand grouping.
+B) Implicit grouping: nails clustered into two groups (left-hand group and right-hand group).
+C) Unstructured layout: scattered nails with no clear rows/groups.
+
+STEP 2) ASSIGN ORDER USING "POSITION-FIRST, SIZE-SECOND":
+- Position-first: keep nails in the same relative order as the reference layout (left-to-right within each perceived group/row).
+- Size-second (only if position is ambiguous):
+  - Thumb = widest/largest nail
+  - Pinky = smallest/narrowest nail
+  - Index/Middle/Ring fill the middle (generally decreasing from Thumb → Pinky)
+  - Use overall width/curvature to infer size, NOT length alone.
+
+STANDARD FINGER ORDER PER HAND:
+THUMB → INDEX → MIDDLE → RING → PINKY
+
+HAND ASSIGNMENT RULES:
+- If two clear rows/groups:
+  - Top/left group = LEFT HAND, Bottom/right group = RIGHT HAND (unless the reference clearly indicates otherwise).
+- If fully scattered:
+  - First cluster the nails into two hands by size distribution:
+    - Each hand must contain exactly one widest (thumb) and one smallest (pinky).
+    - The remaining three sizes (index/middle/ring) fill the middle.
+  - After clustering, order each hand from widest to smallest.
+
+HARD CONSTRAINTS:
+- Never swap designs between fingers once inferred.
+- Keep the count consistent with the reference (10pcs = 5+5, 20pcs = 10+10).
+- If mapping is uncertain, choose the most plausible mapping by size logic and KEEP it consistent across the set.
 
 ============================================
 [IF FASHION PRODUCT - USE EDITORIAL STYLE]:
@@ -175,8 +209,10 @@ FASHION MODEL SHOTS:
 
 ============================================
 [QUALITY]: Professional 8K photography, campaign quality.
-- Realistic skin texture, realistic lighting, no CGI look.
-- Clean, premium, photorealistic output.
+- Photorealistic, clean premium output.
+- Realistic skin texture and lighting, no CGI/illustration look.
+- Correct anatomy and proportions.
+
 
   `;
 
