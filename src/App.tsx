@@ -103,14 +103,16 @@ const App: React.FC = () => {
   const currentWorkspace = state.workspaces.find(ws => ws.id === state.currentWorkspaceId);
 
   const handleGenerate = async () => {
-    if (!state.baseImage || state.productImages.length === 0) {
-      setState(prev => ({ ...prev, error: '베이스 이미지와 제품 이미지를 등록해주세요.' }));
+    // 제품 이미지는 필수
+    if (state.productImages.length === 0) {
+      setState(prev => ({ ...prev, error: '제품 이미지를 최소 1개 이상 등록해주세요.' }));
       return;
     }
 
     setState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
+      // baseImage가 없으면 null로 전달 (모델샷 자동 생성)
       const result = await generateFashionImage(state.baseImage, state.productImages, {
         aspectRatio,
         prompt,
@@ -518,15 +520,24 @@ const App: React.FC = () => {
           {/* 생성 버튼 */}
           <button
             onClick={handleGenerate}
-            disabled={state.isGenerating || !state.baseImage || state.productImages.length === 0}
+            disabled={state.isGenerating || state.productImages.length === 0}
             className="w-full py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
           >
             {state.isGenerating ? (
               <i className="fas fa-spinner fa-spin"></i>
-            ) : (
+            ) : state.baseImage ? (
               '이미지 생성'
+            ) : (
+              '모델샷 생성'
             )}
           </button>
+          
+          {/* 베이스 이미지 없을 때 안내 */}
+          {!state.baseImage && state.productImages.length > 0 && (
+            <p className="text-[10px] text-gray-500 text-center mt-2">
+              베이스 이미지 없이 제품에 맞는 모델샷을 자동 생성합니다
+            </p>
+          )}
 
           {state.error && (
             <div className="px-4 py-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 text-sm">
