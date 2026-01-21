@@ -442,15 +442,21 @@ const App: React.FC = () => {
                 <ImageUploader
                   onUpload={(files: ImageFile[]) => {
                     if (files.length > 0) {
-                      setState(prev => ({ 
-                        ...prev, 
-                        productImages: [...prev.productImages, files[0]] 
-                      }));
+                      setState(prev => {
+                        // 최대 4개까지만 추가
+                        const remainingSlots = 4 - prev.productImages.length;
+                        const filesToAdd = files.slice(0, remainingSlots);
+                        return { 
+                          ...prev, 
+                          productImages: [...prev.productImages, ...filesToAdd] 
+                        };
+                      });
                       setHasUnsavedChanges(true);
                     }
                   }}
                   label="+"
                   compact
+                  multiple
                 />
               )}
             </div>
