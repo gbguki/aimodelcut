@@ -4,6 +4,7 @@ import ImageUploader from './components/ImageUploader';
 import { generateFashionImage } from './services/geminiService';
 import { fetchProjects, saveProject, updateProject, deleteProject } from './services/firebaseService';
 import { AppState, AspectRatio, ImageFile, GenerationResult, Workspace } from './types';
+import { removeBackground } from '@imgly/background-removal';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -38,6 +39,10 @@ const App: React.FC = () => {
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  
+  // 다운로드 관련 상태
+  const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
 
   const timelineEndRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +101,18 @@ const App: React.FC = () => {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges, state.baseImage, state.history.length]);
+
+  // 다운로드 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (showDownloadOptions) {
+        setShowDownloadOptions(false);
+      }
+    };
+    
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showDownloadOptions]);
 
   const currentResult = state.activeVersionIndex >= 0 ? state.history[state.activeVersionIndex] : null;
 
@@ -350,6 +367,60 @@ const App: React.FC = () => {
     }
   };
 
+  // 이미지 다운로드 (원본)
+  const handleDownloadOriginal = async () => {
+    if (!currentResult) return;
+    
+    try {
+      const response = await fetch(currentResult.imageUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `modelcut_${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setShowDownloadOptions(false);
+    } catch (error) {
+      console.error('Download failed:', error);
+      setState(prev => ({ ...prev, error: '다운로드에 실패했습니다.' }));
+    }
+  };
+
+  // 이미지 다운로드 (배경 제거)
+  const handleDownloadNoBg = async () => {
+    if (!currentResult) return;
+    
+    setIsRemovingBg(true);
+    try {
+      // 이미지 URL을 blob으로 변환
+      const response = await fetch(currentResult.imageUrl);
+      const blob = await response.blob();
+      
+      // 배경 제거
+      const removedBgBlob = await removeBackground(blob);
+      
+      // 다운로드
+      const url = URL.createObjectURL(removedBgBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `modelcut_nobg_${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setShowDownloadOptions(false);
+    } catch (error) {
+      console.error('Background removal failed:', error);
+      setState(prev => ({ ...prev, error: '배경 제거에 실패했습니다.' }));
+    } finally {
+      setIsRemovingBg(false);
+    }
+  };
+
   const handleRegisterUser = () => {
     if (!tempName.trim()) return;
     localStorage.setItem('vfa_user_name', tempName.trim());
@@ -551,12 +622,55 @@ const App: React.FC = () => {
           <div className="flex-1 flex items-center justify-center p-8">
             {currentResult ? (
               <div className={`max-w-2xl w-full ${getAspectRatioClass(currentResult.aspectRatio || aspectRatio)}`}>
-                <div className="relative w-full h-full rounded-2xl overflow-hidden glass border border-white/10">
+                <div className="relative w-full h-full rounded-2xl overflow-hidden glass border border-white/10 group">
                   <img 
                     src={currentResult.imageUrl} 
                     alt="Generated" 
                     className="w-full h-full object-cover"
                   />
+                  
+                  {/* 다운로드 버튼 (호버 시 표시) */}
+                  <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-all">
+                    <div className="relative" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => setShowDownloadOptions(!showDownloadOptions)}
+                        className="px-4 py-2 bg-black/80 hover:bg-black text-white rounded-lg flex items-center gap-2 text-sm font-medium backdrop-blur-sm"
+                      >
+                        <i className="fas fa-download"></i>
+                        다운로드
+                      </button>
+                      
+                      {/* 다운로드 옵션 드롭다운 */}
+                      {showDownloadOptions && (
+                        <div className="absolute bottom-full right-0 mb-2 bg-black/95 border border-white/20 rounded-xl overflow-hidden min-w-[180px] backdrop-blur-sm">
+                          <button
+                            onClick={handleDownloadOriginal}
+                            className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/10 transition-all flex items-center gap-3"
+                          >
+                            <i className="fas fa-image text-blue-400"></i>
+                            원본 다운로드
+                          </button>
+                          <button
+                            onClick={handleDownloadNoBg}
+                            disabled={isRemovingBg}
+                            className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/10 transition-all flex items-center gap-3 disabled:opacity-50"
+                          >
+                            {isRemovingBg ? (
+                              <>
+                                <i className="fas fa-spinner fa-spin text-green-400"></i>
+                                배경 제거 중...
+                              </>
+                            ) : (
+                              <>
+                                <i className="fas fa-cut text-green-400"></i>
+                                누끼 다운로드
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
