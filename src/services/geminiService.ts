@@ -108,7 +108,7 @@ export const generateFashionImage = async (
 [SECOND - BEAUTY SUBCATEGORY]:
 - FACE / SKIN / BODY / HAIR / FRAGRANCE / TOOLS-DEVICES
 - LIP
-- NAIL / HAND BEAUTY (nail art, gel nails, nail polish, nail stickers, press-on nails, cuticle oil, hand & nail products)
+- NAIL / HAND BEAUTY (nail art, gel nails, nail polish, nail stickers, press-on nails, nail tips flatlay, cuticle oil, hand & nail products)
 
 ============================================
 [IF BEAUTY PRODUCT - USE K-BEAUTY STYLE]:
@@ -157,39 +157,72 @@ AVOID for Nail/Hand Beauty:
 - Any deformed hands, extra fingers, warped nails, blurry nail details
 - Wide shots where nails are too small to read
 
-[NAIL SET MAPPING & ORDERING - CRITICAL]
-When the reference image shows multiple nail tips (press-on set / 10pcs / 20pcs) with distinct designs:
-You must preserve the exact nail-to-finger mapping. Do NOT shuffle designs for aesthetics.
+[NAIL INPUT TYPE DETECTION - CRITICAL]
+Nail references can be either:
+A) "ON-HAND PHOTO" (real hands wearing the nails)
+B) "NAIL TIP FLATLAY" (press-on/tips laid out on a surface)
+You MUST detect which type it is first, then apply the correct mapping rules below.
+Do NOT reuse flatlay rules for on-hand photos, and do NOT reuse on-hand rules for flatlays.
 
-STEP 1) DETECT LAYOUT TYPE (priority):
+[GLOBAL ORIENTATION LOCK - ALWAYS ON]
+- No mirroring, no horizontal/vertical flip.
+- Never reverse the thumb→pinky sequence for any hand or set.
+- Do not shuffle designs for aesthetics.
+
+========================================================
+A) IF "ON-HAND PHOTO" (hands wearing nails):
+========================================================
+[ON-HAND FINGER IDENTIFICATION - ANATOMY FIRST]
+Do NOT assume finger order by left-to-right in the image.
+Identify fingers by anatomy cues, then order THUMB→INDEX→MIDDLE→RING→PINKY.
+
+THUMB CUES (use multiple cues together; do not rely on “outer/inner”):
+1) Thumb axis is angled relative to the other four fingers (not parallel).
+2) Thumb is more separated from the 4-finger row; there is a larger web-space gap near the thumb base.
+3) Thumb nail is often wider than other nails (supporting cue, not the only cue).
+4) Thumb sits on a different plane/height and has a distinct curvature due to pose.
+
+PINKY CUES:
+- Smallest and narrowest nail.
+- Aligned with the four-finger row at the far end.
+
+ORDERING RULE (ON-HAND):
+1) Find THUMB by axis angle + separation + (optional) width cue.
+2) Then order strictly: THUMB → INDEX → MIDDLE → RING → PINKY.
+3) Even if the hand is palm-up, back-of-hand, rotated, or partially curled, DO NOT reverse the sequence.
+
+HARD CONSTRAINT (ON-HAND):
+- Never output a reversed sequence (PINKY→...→THUMB).
+- If uncertain, re-check: thumb must be the only digit clearly angled + separated from the 4-finger row.
+
+========================================================
+B) IF "NAIL TIP FLATLAY" (press-on/tips laid out):
+========================================================
+[FLATLAY GROUPING & SIZE LOGIC - PRIMARY]
+Flatlay nails often lack anatomy cues, so mapping relies on layout + size distribution.
+
+STEP 1) Detect layout (priority):
 A) Explicit layout: two rows of five, or clear 5-per-hand grouping.
 B) Implicit grouping: nails clustered into two groups (left-hand group and right-hand group).
 C) Unstructured layout: scattered nails with no clear rows/groups.
 
-STEP 2) ASSIGN ORDER USING "POSITION-FIRST, SIZE-SECOND":
-- Position-first: keep nails in the same relative order as the reference layout (left-to-right within each perceived group/row).
-- Size-second (only if position is ambiguous):
-  - Thumb = widest/largest nail
-  - Pinky = smallest/narrowest nail
-  - Index/Middle/Ring fill the middle (generally decreasing from Thumb → Pinky)
-  - Use overall width/curvature to infer size, NOT length alone.
+STEP 2) Position-first, size-second:
+- Position-first: preserve the same relative X-Y order as the reference within each detected row/group.
+- Size-second (when ambiguous): infer finger by WIDTH (not length):
+  - THUMB = widest
+  - PINKY = smallest
+  - INDEX/MIDDLE/RING fill the middle by width gradient.
 
-STANDARD FINGER ORDER PER HAND:
-THUMB → INDEX → MIDDLE → RING → PINKY
+HAND CLUSTERING (if scattered):
+- Cluster into two hands by size distribution:
+  - Each hand must include exactly one widest (thumb) and one smallest (pinky).
+  - Remaining three are mid-width (index/middle/ring).
+- After clustering, order each hand: THUMB → INDEX → MIDDLE → RING → PINKY.
 
-HAND ASSIGNMENT RULES:
-- If two clear rows/groups:
-  - Top/left group = LEFT HAND, Bottom/right group = RIGHT HAND (unless the reference clearly indicates otherwise).
-- If fully scattered:
-  - First cluster the nails into two hands by size distribution:
-    - Each hand must contain exactly one widest (thumb) and one smallest (pinky).
-    - The remaining three sizes (index/middle/ring) fill the middle.
-  - After clustering, order each hand from widest to smallest.
-
-HARD CONSTRAINTS:
-- Never swap designs between fingers once inferred.
-- Keep the count consistent with the reference (10pcs = 5+5, 20pcs = 10+10).
-- If mapping is uncertain, choose the most plausible mapping by size logic and KEEP it consistent across the set.
+HARD CONSTRAINT (FLATLAY):
+- Do NOT reverse thumb→pinky order.
+- Do NOT re-arrange or “beautify” by swapping designs.
+- Keep the count consistent with the reference (10pcs=5+5, 20pcs=10+10, etc.).
 
 ============================================
 [IF FASHION PRODUCT - USE EDITORIAL STYLE]:
@@ -212,7 +245,6 @@ FASHION MODEL SHOTS:
 - Photorealistic, clean premium output.
 - Realistic skin texture and lighting, no CGI/illustration look.
 - Correct anatomy and proportions.
-
 
   `;
 
