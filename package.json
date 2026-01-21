@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@google/genai": "^1.37.0",
+    "@tailwindcss/vite": "^4.1.18",
     "firebase": "^11.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

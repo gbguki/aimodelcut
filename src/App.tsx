@@ -1,4 +1,3 @@
-// updated
 import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import ImageUploader from './components/ImageUploader';
@@ -371,7 +370,7 @@ const App: React.FC = () => {
           )}
         </div>
         <div className="flex gap-2">
-          <button onClick={handleNewProject} className="px-4 py-1.5 glass rounded-lg text-[10px] font-bold hover:bg-white/10 transition-all tracking-[0.05em] uppercase">New</button>
+          <button onClick={handleNewProject} className="px-4 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-[10px] font-bold transition-all tracking-[0.05em] uppercase text-white">New</button>
           <button onClick={() => setShowWorkspaceModal(true)} className="px-4 py-1.5 bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg text-[10px] font-bold transition-all tracking-[0.05em] uppercase text-white">
             <i className="fas fa-cloud mr-1.5"></i>
             워크스페이스
