@@ -291,31 +291,41 @@ export const replaceBackgroundWithGreen = async (
     const { base64, mimeType } = await urlToBase64(imageUrl);
 
     const systemInstruction = `
-      You are a professional image editor specializing in background replacement for chroma keying.
+      You are a PRECISION background replacement specialist for chroma keying.
       
-      [CRITICAL TASK]: Replace the background with a SOLID PURE GREEN screen (#00FF00, RGB: 0, 255, 0).
+      [ABSOLUTE PRIORITY - PRESERVE THESE]:
+      1. ALL HAIR - Every single strand, flyaway, and wisp of hair MUST remain untouched
+      2. Face, skin, body - 100% preserved with original colors
+      3. ALL clothing and accessories
+      4. Hands, fingers, arms, legs - complete preservation
+      5. ANY products the subject is holding or wearing
+      6. Fine details: eyelashes, eyebrows, facial hair, jewelry
       
-      [WHAT TO KEEP - DO NOT MODIFY]:
-      - ALL people, models, faces, bodies (100% intact)
-      - ALL products, accessories, clothing
-      - Hair, skin, makeup, nails, hands - EVERYTHING on the person
-      - Natural lighting and shadows ON the subject
-      - Edge details, especially hair strands
+      [CRITICAL HAIR PRESERVATION]:
+      - Hair is NEVER part of the background, even if it's dark or blends in
+      - Include ALL hair strands, even transparent or semi-transparent ones
+      - Preserve hair texture and individual strands
+      - Do NOT simplify or smooth hair edges
+      - Baby hairs and flyaways are ESSENTIAL - keep them all
       
-      [WHAT TO REPLACE]:
-      - Replace ALL background areas with SOLID PURE GREEN (#00FF00)
-      - The green MUST be uniform and consistent
-      - Green should NOT touch or blend with the subject
-      - Maintain clean, sharp edges between subject and green background
+      [BACKGROUND REPLACEMENT TASK]:
+      - Replace ONLY the true background with SOLID PURE GREEN (#00FF00, RGB: 0,255,0)
+      - Background = walls, floors, props, plants, furniture, studio elements
+      - Background does NOT include any part of the person or their hair
+      - Green must be uniform with NO patterns, gradients, or textures
+      - Maintain SHARP, PRECISE edges between subject and green
       
-      [CRITICAL REQUIREMENTS]:
-      1. Use ONLY pure green color: RGB(0, 255, 0) or HEX #00FF00
-      2. NO gradients, NO patterns, NO textures in the green area
-      3. NO transparency - solid opaque green background
-      4. Preserve ALL subject details perfectly
-      5. Maintain sharp edges without green spill on the subject
+      [EDGE HANDLING]:
+      - Do NOT blur or fade hair edges into green
+      - Keep natural hair boundaries intact
+      - If unsure whether something is hair or background, it's HAIR - preserve it
+      - Allow natural transparency in hair edges, don't force solid green behind semi-transparent hair
       
-      [OUTPUT]: Image with subject intact on a solid pure green background, ready for chroma key removal.
+      [OUTPUT QUALITY]:
+      - Professional studio-quality cutout
+      - Zero loss of subject details
+      - Clean chroma key ready result
+      - Solid opaque green background only where there was background before
     `;
 
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -323,7 +333,17 @@ export const replaceBackgroundWithGreen = async (
       contents: {
         parts: [
           { 
-            text: "Replace the background with a SOLID PURE GREEN color (#00FF00). Keep the person/model 100% intact. The green background must be uniform with NO patterns or gradients. This is for chroma key background removal." 
+            text: `Replace ONLY the background with solid pure green (#00FF00). 
+
+CRITICAL: Preserve ALL hair - every single strand, flyaway, and wisp must remain intact with original colors. Hair is NEVER background.
+
+Keep the person 100% intact including:
+- ALL hair (especially sides, back, flyaways, baby hairs)
+- Face, skin, body
+- Clothing and accessories
+- Any products they're holding
+
+The green background must be uniform with NO patterns. This is for professional chroma key removal.` 
           },
           {
             inlineData: {
