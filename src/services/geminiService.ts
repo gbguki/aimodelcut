@@ -295,24 +295,37 @@ export const removeBackground = async (
     const systemInstruction = `
       You are a professional image editing AI specializing in precise background removal for fashion and beauty product photography.
       
-      [TASK]: Remove the background from the provided image while preserving the subject perfectly.
+      [CRITICAL]: This is BACKGROUND removal ONLY. You must keep ALL people/models in the image.
       
-      [REQUIREMENTS]:
-      1. Keep the main subject (model and product) completely intact with ALL details
-      2. Remove ALL background elements completely - leave only the subject
-      3. Create a clean, transparent background (PNG format)
-      4. Maintain sharp, natural edges especially around:
+      [TASK]: Remove ONLY the background while preserving ALL human subjects and products perfectly.
+      
+      [WHAT TO KEEP - DO NOT REMOVE]:
+      - ALL people, models, faces, bodies (100% intact)
+      - ALL products being shown (cosmetics, accessories, clothing, etc.)
+      - Hair, skin, makeup, nails, hands, arms, legs - EVERYTHING on the person
+      - Clothing, jewelry, and any items worn or held by the model
+      - Natural shadows on the subject's body
+      
+      [WHAT TO REMOVE]:
+      - Plain backgrounds (white, colored, gradient backgrounds)
+      - Studio backgrounds
+      - Walls, floors, and environmental elements
+      - Props that are NOT part of the product or model
+      
+      [TECHNICAL REQUIREMENTS]:
+      1. Create a clean, transparent background (PNG format)
+      2. Maintain sharp, natural edges especially around:
          - Hair strands and flyaways
-         - Clothing fabric edges
+         - Face contours and features
+         - Fingers, hands, and body parts
          - Product details
-         - Fingers and hands
-      5. ${options?.preserveShadows !== false ? 'Preserve natural shadows cast by the subject' : 'Remove all shadows'}
-      6. Do NOT alter the subject's appearance, pose, composition, colors, or lighting
-      7. Maintain the exact same resolution and aspect ratio
+      3. ${options?.preserveShadows !== false ? 'Preserve natural shadows on the model' : 'Remove only background shadows'}
+      4. Do NOT alter colors, lighting, pose, or any visual aspect of the subject
+      5. Maintain the exact same resolution and composition
       
       [QUALITY]: Professional studio-quality cutout suitable for e-commerce and advertising.
       
-      [OUTPUT]: Return ONLY the image with transparent background. No text response needed.
+      [OUTPUT]: Return ONLY the image with transparent background. The model and product must remain 100% intact.
     `;
 
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -320,7 +333,7 @@ export const removeBackground = async (
       contents: {
         parts: [
           { 
-            text: "Remove the background from this image completely, keeping only the main subject with a transparent background. Preserve all fine details like hair and edges." 
+            text: "Remove ONLY the plain background from this image. Keep the model/person 100% intact - do not remove any part of the human subject. Keep their face, body, hands, hair, clothing, and any products they are holding or wearing. Only remove the background behind them and replace it with transparency." 
           },
           {
             inlineData: {
