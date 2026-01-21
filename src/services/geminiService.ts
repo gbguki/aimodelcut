@@ -98,26 +98,34 @@ export const generateFashionImage = async (
     
     [CORE CONCEPT]: Every image MUST include a human model. This is a "Model Cut" service.
     
-    [TASK]: Generate a professional MODEL SHOT (advertisement image with a model) featuring the provided product(s).
+    [STYLE]: Korean Beauty (K-Beauty) advertisement style
+    - Clean, soft, minimalist backgrounds (soft pink, beige, white, pastel tones)
+    - Asian/Korean-looking models with natural, fresh makeup
+    - Soft, flattering lighting
+    - Natural, approachable poses (not overly dramatic or luxurious)
+    - Fresh, youthful, clean aesthetic
+    
+    [TASK]: Generate a professional K-BEAUTY STYLE MODEL SHOT featuring the provided product(s).
     
     [MODEL SHOT PRINCIPLES]:
     1. A MODEL must always be present in the image
     2. The model should naturally showcase the product
-    3. Study how real brands advertise this type of product WITH MODELS
+    3. Follow Korean beauty advertisement aesthetics
     
     [STYLE GUIDANCE BY PRODUCT TYPE]:
-    - NAIL/HAND PRODUCTS: Model's face visible with hand naturally positioned near face/chin, showing nails elegantly (like K-beauty nail ads)
-    - LIP PRODUCTS: Model's face with lips as focus, may hold product or just show applied result
-    - SKINCARE/COSMETICS: Model holding or applying the product, glowing skin
-    - FASHION ITEMS: Model wearing/holding the item in editorial style
-    - FRAGRANCE: Model in elegant pose with or near the bottle
+    - NAIL/HAND PRODUCTS: Model's face visible with hand naturally positioned near face/chin, showing nails elegantly
+    - LIP PRODUCTS: Model's face with lips as focus, soft expression
+    - SKINCARE/COSMETICS: Model with glowing, dewy skin, may hold product naturally
+    - FASHION ITEMS: Model wearing/holding the item in clean editorial style
+    - FRAGRANCE: Model in soft, romantic setting with product placed naturally nearby (NOT holding dramatically)
     
-    [CREATIVE FREEDOM]:
-    - Choose the best pose, angle, and composition for this specific product
-    - The model can be showing the product applied, holding it, or both
-    - Use your knowledge of real advertisement styles for this category
+    [AVOID]:
+    - Overly dramatic Western luxury style
+    - Dark, moody backgrounds
+    - Over-the-top glamorous poses
+    - Heavy, dramatic makeup
     
-    [QUALITY]: Professional 8K photography, magazine/campaign quality, luxury brand aesthetic
+    [QUALITY]: Professional photography, K-beauty campaign quality, clean and fresh aesthetic
   `;
 
   const hasBaseImage = baseImage !== null;
@@ -141,11 +149,11 @@ export const generateFashionImage = async (
 
   const userPromptNoBase = `
     ${editInstruction}
-    INSTRUCTION: ${hasPreviousImage ? 'Edit the previous image based on the request.' : 'Create a MODEL SHOT - an advertisement image featuring a MODEL showcasing the provided product(s).'}
+    INSTRUCTION: ${hasPreviousImage ? 'Edit the previous image based on the request.' : 'Create a K-BEAUTY STYLE MODEL SHOT featuring a MODEL showcasing the provided product(s).'}
     
-    BEHAVIOR: ${hasPreviousImage ? 'Maintain the model and composition from the previous image, only apply the requested changes.' : 'A human model MUST be in the image. Analyze the product type and create an appropriate model shot like real brand advertisements use.'}
+    BEHAVIOR: ${hasPreviousImage ? 'Maintain the model and composition from the previous image, only apply the requested changes.' : 'A human model (Asian/Korean-looking) MUST be in the image. Use clean, soft, fresh Korean beauty advertisement style with pastel/soft backgrounds.'}
     
-    SPECIFIC REQUESTS: ${config.prompt || 'Create a professional model shot that naturally showcases this product.'}
+    SPECIFIC REQUESTS: ${config.prompt || 'Create a professional K-beauty style model shot with clean, fresh aesthetic.'}
   `;
 
   const userPrompt = hasBaseImage ? userPromptWithBase : userPromptNoBase;
