@@ -99,16 +99,13 @@ export const generateFashionImage = async (
 [CORE CONCEPT]: Every image MUST include a human model. This is a "Model Cut" service.
 
 [FIRST]: Identify the product category:
-- BEAUTY: All cosmetics, skincare, bodycare, haircare, fragrance, and beauty tools/devices
-  (Examples: makeup, lip, nail, skincare, serum, cream, lotion, body oil, body scrub, sunscreen,
-   hand cream, foot cream, hair styling, shampoo, fragrance, perfume,
-   beauty tools like gua sha, rollers, brushes, LED masks, beauty devices, etc.)
-- FASHION: Clothing, bags, shoes, jewelry, watches, eyewear, accessories
+- BEAUTY: cosmetics, skincare, bodycare, haircare, fragrance, beauty tools/devices (including nail)
+- FASHION: clothing, bags, shoes, jewelry, watches, eyewear, accessories
 
 [SECOND - BEAUTY SUBCATEGORY]:
 - FACE / SKIN / BODY / HAIR / FRAGRANCE / TOOLS-DEVICES
 - LIP
-- NAIL / HAND BEAUTY (nail art, gel nails, nail polish, nail stickers, press-on nails, nail tips flatlay, cuticle oil, hand & nail products)
+- NAIL / HAND BEAUTY (on-hand nails, nail art, gel nails, nail polish, nail stickers, press-on nails, nail tips flatlay, cuticle oil, hand & nail products)
 
 ============================================
 [IF BEAUTY PRODUCT - USE K-BEAUTY STYLE]:
@@ -121,129 +118,114 @@ export const generateFashionImage = async (
 - Dewy, glowing skin
 
 BEAUTY MODEL SHOTS - Adapt based on product:
-- FACE PRODUCTS: Model's face as focus
-- BODY PRODUCTS: Show appropriate body part (back, legs, arms, etc.) with model
-- HAIR: Model with beautiful hair
-- FRAGRANCE: Soft, romantic setting
-- TOOLS/DEVICES: Model using it on the appropriate area (face tool = face, body tool = body)
+- FACE: face focus
+- BODY: appropriate body part focus
+- HAIR: hair focus
+- FRAGRANCE: soft romantic setting
+- TOOLS/DEVICES: model using it naturally
+- LIP: close-up, face visible, lips in focus, natural K-beauty makeup
 
-- LIP: Close-up with face visible, lip area in focus, natural K-beauty makeup
-
-AVOID for Beauty (general):
-- Dark, moody backgrounds
+AVOID for Beauty:
+- Dark/moody backgrounds
 - Overly dramatic Western luxury style
-- Heavy, dramatic makeup
+- Heavy dramatic makeup
 - Over-the-top glamorous poses
 
 ============================================
-[IF NAIL / HAND BEAUTY - USE "PINTEREST NAIL EDITORIAL" STYLE]:
+[IF NAIL / HAND BEAUTY - USE "PINTEREST NAIL INSPO SNAPSHOT" STYLE]:
 ============================================
-- The human model is primarily a hands model: hands and nails are the hero.
-- Composition: close-up of hands with nails occupying a large portion of the frame.
-- Lighting: bright natural daylight, soft shadows, high-key clean look.
-- Background: minimal, airy, clean (off-white, cream, light beige, light gray). Lifestyle context is allowed but subtle.
-- Aesthetic: realistic Pinterest-style nail inspo photo (editorial snapshot feel), not a dramatic studio campaign.
-- Focus: shallow depth of field, nails in sharp focus, background softly blurred.
-- Hands realism: correct anatomy, natural finger proportions, realistic skin texture. Nails must be crisp and detailed.
-- Product interaction:
-  - If a nail product exists (bottle, brush, sticker sheet, cuticle oil): the model must hold it with a delicate grasp/pinch near the hands so it feels usable and natural.
-  - If the product is the nail design itself: do not force a bottle; nails remain the hero.
-- Do NOT require the face for nail shots. If any face appears, it must not dominate the frame; nails stay the focus.
+STYLE (MUST):
+- Pinterest nail inspo photo: casual editorial snapshot, not a polished studio campaign.
+- Bright natural daylight (window light), soft shadows, airy highlights.
+- Minimal warm-neutral background (off-white/cream/beige/light gray), subtle lifestyle props allowed.
+- Slightly candid feel: handheld smartphone-photo vibe is OK (but still high-res and photorealistic).
+- Shallow depth of field; nails are tack-sharp; background softly blurred.
+- Realistic skin texture (no over-retouch / no plastic skin).
 
-AVOID for Nail/Hand Beauty:
-- Dark, moody backgrounds
-- Overly dramatic Western luxury styling
-- Heavy, glamorous makeup emphasis
-- Any deformed hands, extra fingers, warped nails, blurry nail details
-- Wide shots where nails are too small to read
+COMPOSITION (MUST):
+- Hands and nails are the hero; face is NOT required.
+- If any face appears, it must be cropped/blurred and never dominate the frame.
 
+PRODUCT INTERACTION:
+- If a nail product exists (bottle/brush/sticker sheet/cuticle oil): hold with a delicate pinch/grasp near the hands.
+- If the product is the nail design itself: do NOT force a bottle; nails remain the hero.
+
+AVOID for Nail:
+- Studio flash look, dramatic luxury lighting, heavy glamour vibe
+- Deformed hands, extra fingers, warped nails, blurry nail details
+- Wide shots where nail art is not readable
+
+============================================
 [NAIL INPUT TYPE DETECTION - CRITICAL]
 Nail references can be either:
-A) "ON-HAND PHOTO" (real hands wearing the nails)
-B) "NAIL TIP FLATLAY" (press-on/tips laid out on a surface)
-You MUST detect which type it is first, then apply the correct mapping rules below.
-Do NOT reuse flatlay rules for on-hand photos, and do NOT reuse on-hand rules for flatlays.
+A) ON-HAND PHOTO (real hands wearing nails)
+B) NAIL TIP FLATLAY (press-on/tips laid out)
 
-[GLOBAL ORIENTATION LOCK - ALWAYS ON]
+You MUST detect the type first, then apply the correct mapping rules below.
+
+[GLOBAL ORIENTATION & MAPPING LOCK - ALWAYS ON]
 - No mirroring, no horizontal/vertical flip.
-- Never reverse the thumb→pinky sequence for any hand or set.
-- Do not shuffle designs for aesthetics.
+- NEVER reverse thumb→pinky order.
+- NEVER shuffle nail designs between fingers or between hands for aesthetics.
+- Mapping accuracy has higher priority than pose aesthetics.
 
 ========================================================
-A) IF "ON-HAND PHOTO" (hands wearing nails):
+A) ON-HAND PHOTO MAPPING (anatomy-first):
 ========================================================
-[ON-HAND FINGER IDENTIFICATION - ANATOMY FIRST]
-Do NOT assume finger order by left-to-right in the image.
-Identify fingers by anatomy cues, then order THUMB→INDEX→MIDDLE→RING→PINKY.
+Do NOT order fingers by left-to-right in the image.
+Identify THUMB first by anatomy cues, then order THUMB→INDEX→MIDDLE→RING→PINKY.
 
-THUMB CUES (use multiple cues together; do not rely on “outer/inner”):
+THUMB cues (use multiple cues; do NOT use “outer/inner”):
 1) Thumb axis is angled relative to the other four fingers (not parallel).
-2) Thumb is more separated from the 4-finger row; there is a larger web-space gap near the thumb base.
-3) Thumb nail is often wider than other nails (supporting cue, not the only cue).
-4) Thumb sits on a different plane/height and has a distinct curvature due to pose.
+2) Thumb is more separated from the 4-finger row (web-space gap at the base).
+3) Thumb nail is often wider (supporting cue).
+4) Thumb sits on a different plane/height due to pose.
 
-PINKY CUES:
-- Smallest and narrowest nail.
-- Aligned with the four-finger row at the far end.
+PINKY cues:
+- smallest/narrowest nail; aligned at the end of the 4-finger row.
 
-ORDERING RULE (ON-HAND):
-1) Find THUMB by axis angle + separation + (optional) width cue.
-2) Then order strictly: THUMB → INDEX → MIDDLE → RING → PINKY.
-3) Even if the hand is palm-up, back-of-hand, rotated, or partially curled, DO NOT reverse the sequence.
-
-HARD CONSTRAINT (ON-HAND):
-- Never output a reversed sequence (PINKY→...→THUMB).
-- If uncertain, re-check: thumb must be the only digit clearly angled + separated from the 4-finger row.
+HARD CONSTRAINT:
+- Never output reversed order (pinky→...→thumb).
+- If uncertain, re-check: thumb must be the only digit clearly angled + separated.
 
 ========================================================
-B) IF "NAIL TIP FLATLAY" (press-on/tips laid out):
+B) NAIL TIP FLATLAY MAPPING (layout + width-first):
 ========================================================
-[FLATLAY GROUPING & SIZE LOGIC - PRIMARY]
-Flatlay nails often lack anatomy cues, so mapping relies on layout + size distribution.
+STEP 1) Detect layout:
+- explicit rows/groups OR two clusters OR scattered.
 
-STEP 1) Detect layout (priority):
-A) Explicit layout: two rows of five, or clear 5-per-hand grouping.
-B) Implicit grouping: nails clustered into two groups (left-hand group and right-hand group).
-C) Unstructured layout: scattered nails with no clear rows/groups.
+STEP 2) Position-first, width-second:
+- Position-first: preserve relative X-Y order within the same row/group.
+- Width-second (if ambiguous): THUMB=widest, PINKY=smallest, others are mid-width.
 
-STEP 2) Position-first, size-second:
-- Position-first: preserve the same relative X-Y order as the reference within each detected row/group.
-- Size-second (when ambiguous): infer finger by WIDTH (not length):
-  - THUMB = widest
-  - PINKY = smallest
-  - INDEX/MIDDLE/RING fill the middle by width gradient.
-
-HAND CLUSTERING (if scattered):
+If scattered:
 - Cluster into two hands by size distribution:
-  - Each hand must include exactly one widest (thumb) and one smallest (pinky).
-  - Remaining three are mid-width (index/middle/ring).
-- After clustering, order each hand: THUMB → INDEX → MIDDLE → RING → PINKY.
+  - each hand has one widest (thumb) and one smallest (pinky)
+  - remaining three are mid-width
+- Then order each hand: THUMB→INDEX→MIDDLE→RING→PINKY.
 
-HARD CONSTRAINT (FLATLAY):
-- Do NOT reverse thumb→pinky order.
-- Do NOT re-arrange or “beautify” by swapping designs.
-- Keep the count consistent with the reference (10pcs=5+5, 20pcs=10+10, etc.).
+HARD CONSTRAINT:
+- Do NOT reverse order.
+- Do NOT beautify by swapping designs.
+- Keep count consistent (10pcs=5+5, 20pcs=10+10).
+
+============================================
+[MANDATORY TWO-PASS WORKFLOW FOR NAIL MAPPING]
+If the user provides a reference image with multiple distinct nail designs:
+1) First, derive an explicit Finger Mapping Manifest (left hand and right hand, thumb→pinky).
+2) Then generate the final image strictly following that manifest without any swaps.
+Mapping must be treated as immutable.
 
 ============================================
 [IF FASHION PRODUCT - USE EDITORIAL STYLE]:
 ============================================
-- Can use various backgrounds (studio, urban, lifestyle)
-- Diverse model looks welcome
-- Editorial, magazine-style photography
-- Dynamic or elegant poses depending on the item
+- Magazine-style editorial photography
+- Natural placement and realistic physics
 - Focus on the fashion item as hero
 
-FASHION MODEL SHOTS:
-- CLOTHING: Full/half body wearing the item
-- BAGS: Model holding/wearing naturally
-- SHOES: Full body or lower body focus
-- JEWELRY/WATCHES: Close-up or portrait with item visible
-- EYEWEAR: Face focus with glasses/sunglasses
-
 ============================================
-[QUALITY]: Professional 8K photography, campaign quality.
-- Photorealistic, clean premium output.
-- Realistic skin texture and lighting, no CGI/illustration look.
+[QUALITY]:
+- Photorealistic, premium, high-resolution output.
 - Correct anatomy and proportions.
 
   `;
