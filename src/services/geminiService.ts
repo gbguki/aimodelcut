@@ -271,61 +271,51 @@ export const generateFashionImage = async (
 };
 
 /**
- * Gemini API를 사용한 배경 제거 함수
+ * 1단계: Gemini API로 배경을 녹색(Chroma Key)으로 변경
  */
-export const removeBackground = async (
+export const replaceBackgroundWithGreen = async (
   imageUrl: string,
   options?: {
-    preserveShadows?: boolean;
     aspectRatio?: string;
   }
 ): Promise<string> => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
   
   if (!apiKey) {
-    throw new Error("Gemini API key is not configured. Please set VITE_GEMINI_API_KEY or VITE_API_KEY in your .env file.");
+    throw new Error("Gemini API key is not configured.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
 
   try {
-    // 이미지를 base64로 변환
     const { base64, mimeType } = await urlToBase64(imageUrl);
 
     const systemInstruction = `
-      You are a professional image editing AI specializing in precise background removal for fashion and beauty product photography.
+      You are a professional image editor specializing in background replacement for chroma keying.
       
-      [CRITICAL]: This is BACKGROUND removal ONLY. You must keep ALL people/models in the image.
+      [CRITICAL TASK]: Replace the background with a SOLID PURE GREEN screen (#00FF00, RGB: 0, 255, 0).
       
-      [TASK]: Remove ONLY the background while preserving ALL human subjects and products perfectly.
-      
-      [WHAT TO KEEP - DO NOT REMOVE]:
+      [WHAT TO KEEP - DO NOT MODIFY]:
       - ALL people, models, faces, bodies (100% intact)
-      - ALL products being shown (cosmetics, accessories, clothing, etc.)
-      - Hair, skin, makeup, nails, hands, arms, legs - EVERYTHING on the person
-      - Clothing, jewelry, and any items worn or held by the model
-      - Natural shadows on the subject's body
+      - ALL products, accessories, clothing
+      - Hair, skin, makeup, nails, hands - EVERYTHING on the person
+      - Natural lighting and shadows ON the subject
+      - Edge details, especially hair strands
       
-      [WHAT TO REMOVE]:
-      - Plain backgrounds (white, colored, gradient backgrounds)
-      - Studio backgrounds
-      - Walls, floors, and environmental elements
-      - Props that are NOT part of the product or model
+      [WHAT TO REPLACE]:
+      - Replace ALL background areas with SOLID PURE GREEN (#00FF00)
+      - The green MUST be uniform and consistent
+      - Green should NOT touch or blend with the subject
+      - Maintain clean, sharp edges between subject and green background
       
-      [TECHNICAL REQUIREMENTS]:
-      1. Create a clean, transparent background (PNG format)
-      2. Maintain sharp, natural edges especially around:
-         - Hair strands and flyaways
-         - Face contours and features
-         - Fingers, hands, and body parts
-         - Product details
-      3. ${options?.preserveShadows !== false ? 'Preserve natural shadows on the model' : 'Remove only background shadows'}
-      4. Do NOT alter colors, lighting, pose, or any visual aspect of the subject
-      5. Maintain the exact same resolution and composition
+      [CRITICAL REQUIREMENTS]:
+      1. Use ONLY pure green color: RGB(0, 255, 0) or HEX #00FF00
+      2. NO gradients, NO patterns, NO textures in the green area
+      3. NO transparency - solid opaque green background
+      4. Preserve ALL subject details perfectly
+      5. Maintain sharp edges without green spill on the subject
       
-      [QUALITY]: Professional studio-quality cutout suitable for e-commerce and advertising.
-      
-      [OUTPUT]: Return ONLY the image with transparent background. The model and product must remain 100% intact.
+      [OUTPUT]: Image with subject intact on a solid pure green background, ready for chroma key removal.
     `;
 
     const response: GenerateContentResponse = await ai.models.generateContent({
@@ -333,7 +323,7 @@ export const removeBackground = async (
       contents: {
         parts: [
           { 
-            text: "Remove ONLY the plain background from this image. Keep the model/person 100% intact - do not remove any part of the human subject. Keep their face, body, hands, hair, clothing, and any products they are holding or wearing. Only remove the background behind them and replace it with transparency." 
+            text: "Replace the background with a SOLID PURE GREEN color (#00FF00). Keep the person/model 100% intact. The green background must be uniform with NO patterns or gradients. This is for chroma key background removal." 
           },
           {
             inlineData: {
@@ -352,7 +342,6 @@ export const removeBackground = async (
       }
     });
 
-    // 생성된 이미지 추출
     if (response.candidates && response.candidates.length > 0) {
       const candidate = response.candidates[0];
       const contentParts = candidate?.content?.parts;
@@ -360,27 +349,106 @@ export const removeBackground = async (
       if (contentParts) {
         for (const part of contentParts) {
           if (part.inlineData) {
-            // PNG 형식으로 반환 (투명 배경 지원)
-            return `data:image/png;base64,${part.inlineData.data}`;
+            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
           }
         }
       }
     }
 
-    throw new Error("배경 제거에 실패했습니다.");
+    throw new Error("녹색 배경 생성에 실패했습니다.");
+    
+  } catch (error: any) {
+    console.error("Green background replacement error:", error);
+    throw new Error("배경을 녹색으로 변경하는데 실패했습니다: " + error.message);
+  }
+};
+
+/**
+ * 2단계: Canvas를 사용하여 녹색 배경을 투명하게 변환
+ */
+export const removeGreenScreen = async (
+  imageUrl: string,
+  tolerance: number = 50
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      
+      if (!ctx) {
+        reject(new Error('Canvas context를 생성할 수 없습니다.'));
+        return;
+      }
+
+      canvas.width = img.width;
+      canvas.height = img.height;
+      
+      // 이미지 그리기
+      ctx.drawImage(img, 0, 0);
+      
+      // 픽셀 데이터 가져오기
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      // 녹색 제거 (Chroma Key)
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        
+        // 녹색 판별: G값이 높고 R, B값이 낮은 경우
+        const isGreen = g > 100 && r < tolerance && b < tolerance && Math.abs(g - 255) < tolerance;
+        
+        // 추가 체크: 상대적으로 G가 R, B보다 훨씬 큰 경우
+        const greenDominant = g > (r + b) * 1.5;
+        
+        if (isGreen || greenDominant) {
+          data[i + 3] = 0; // 완전 투명
+        }
+      }
+      
+      // 수정된 데이터 적용
+      ctx.putImageData(imageData, 0, 0);
+      
+      // PNG로 변환 (투명도 지원)
+      const resultUrl = canvas.toDataURL('image/png');
+      resolve(resultUrl);
+    };
+    
+    img.onerror = () => {
+      reject(new Error('이미지를 로드할 수 없습니다.'));
+    };
+    
+    img.src = imageUrl;
+  });
+};
+
+/**
+ * 통합 배경 제거 함수 (2단계 프로세스)
+ */
+export const removeBackground = async (
+  imageUrl: string,
+  options?: {
+    preserveShadows?: boolean;
+    aspectRatio?: string;
+  }
+): Promise<string> => {
+  try {
+    // 1단계: Gemini로 배경을 녹색으로 변경
+    const greenBgImage = await replaceBackgroundWithGreen(imageUrl, {
+      aspectRatio: options?.aspectRatio
+    });
+    
+    // 2단계: Canvas로 녹색 제거하여 투명하게
+    const transparentImage = await removeGreenScreen(greenBgImage, 50);
+    
+    return transparentImage;
     
   } catch (error: any) {
     console.error("Background removal error:", error);
-    
-    // 에러 메시지 개선
-    if (error.message?.includes('API key')) {
-      throw new Error("API 키가 설정되지 않았습니다.");
-    } else if (error.message?.includes('quota')) {
-      throw new Error("API 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요.");
-    } else if (error.message?.includes('image')) {
-      throw new Error("이미지를 처리할 수 없습니다. 다른 이미지로 시도해주세요.");
-    }
-    
     throw new Error("배경 제거 중 오류가 발생했습니다: " + error.message);
   }
 };
