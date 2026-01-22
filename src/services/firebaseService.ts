@@ -81,11 +81,25 @@ async function uploadImageToCloudinary(base64Data: string, folder: string = "mod
     throw new Error("Cloudinary credentials are not configured. Please set VITE_CLOUDINARY_* in your environment.");
   }
 
+  // base64 데이터에 prefix가 없으면 추가
+  let fileData = base64Data;
+  if (!base64Data.startsWith('data:')) {
+    // JPEG/PNG 감지 (JPEG는 /9j/로 시작, PNG는 iVBOR로 시작)
+    if (base64Data.startsWith('/9j/')) {
+      fileData = `data:image/jpeg;base64,${base64Data}`;
+    } else if (base64Data.startsWith('iVBOR')) {
+      fileData = `data:image/png;base64,${base64Data}`;
+    } else {
+      // 기본값으로 jpeg 사용
+      fileData = `data:image/jpeg;base64,${base64Data}`;
+    }
+  }
+
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = await generateUploadSignature(timestamp, folder);
 
   const formData = new FormData();
-  formData.append('file', base64Data);
+  formData.append('file', fileData);
   formData.append('api_key', CLOUDINARY_API_KEY);
   formData.append('timestamp', timestamp.toString());
   formData.append('signature', signature);
