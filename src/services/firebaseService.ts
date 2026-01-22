@@ -27,62 +27,144 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // ============================================
-// 🔹 ImgBB 이미지 업로드
+// 🔹 Cloudinary 이미지 업로드/삭제
 // ============================================
 
-const IMGBB_API_KEY = import.meta.env.VITE_IMGBB_API_KEY || "";
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "";
+const CLOUDINARY_API_KEY = import.meta.env.VITE_CLOUDINARY_API_KEY || "";
+const CLOUDINARY_API_SECRET = import.meta.env.VITE_CLOUDINARY_API_SECRET || "";
 
 /**
- * Base64 이미지를 ImgBB에 업로드하고 URL 반환
+ * SHA-1 해시 생성 (Web Crypto API 사용)
  */
-async function uploadImageToImgBB(base64Data: string, name?: string): Promise<string> {
-  if (!IMGBB_API_KEY) {
-    throw new Error("ImgBB API key is not configured. Please set VITE_IMGBB_API_KEY in your environment.");
-  }
-
-  // data:image/png;base64,xxxx 형식에서 base64 부분만 추출
-  let cleanBase64 = base64Data;
-  if (base64Data.includes(',')) {
-    cleanBase64 = base64Data.split(',')[1];
-  }
-
-  const formData = new FormData();
-  formData.append('key', IMGBB_API_KEY);
-  formData.append('image', cleanBase64);
-  if (name) {
-    formData.append('name', name);
-  }
-
-  const response = await fetch('https://api.imgbb.com/1/upload', {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('ImgBB upload failed:', errorText);
-    throw new Error(`ImgBB upload failed: ${response.status}`);
-  }
-
-  const result = await response.json();
-  
-  if (!result.success) {
-    throw new Error(result.error?.message || 'ImgBB upload failed');
-  }
-
-  return result.data.display_url;
+async function sha1(message: string): Promise<string> {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-1', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
- * ImageFile 객체를 ImgBB에 업로드하고 URL로 변환된 객체 반환
+ * Cloudinary 업로드 서명 생성
+ */
+async function generateUploadSignature(timestamp: number, folder: string): Promise<string> {
+  const signatureString = `folder=${folder}&timestamp=${timestamp}${CLOUDINARY_API_SECRET}`;
+  return await sha1(signatureString);
+}
+
+/**
+ * Cloudinary 삭제 서명 생성
+ */
+async function generateDeleteSignature(publicId: string, timestamp: number): Promise<string> {
+  const signatureString = `public_id=${publicId}&timestamp=${timestamp}${CLOUDINARY_API_SECRET}`;
+  return await sha1(signatureString);
+}
+
+/**
+ * Cloudinary URL에서 public_id 추출
+ */
+function extractPublicIdFromUrl(url: string): string | null {
+  try {
+    // https://res.cloudinary.com/{cloud}/image/upload/v{version}/{folder}/{filename}.{ext}
+    const match = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Base64 이미지를 Cloudinary에 업로드하고 URL 반환
+ */
+async function uploadImageToCloudinary(base64Data: string, folder: string = "modelcut"): Promise<string> {
+  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+    throw new Error("Cloudinary credentials are not configured. Please set VITE_CLOUDINARY_* in your environment.");
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = await generateUploadSignature(timestamp, folder);
+
+  const formData = new FormData();
+  formData.append('file', base64Data);
+  formData.append('api_key', CLOUDINARY_API_KEY);
+  formData.append('timestamp', timestamp.toString());
+  formData.append('signature', signature);
+  formData.append('folder', folder);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+    {
+      method: 'POST',
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Cloudinary upload failed:', errorText);
+    throw new Error(`Cloudinary upload failed: ${response.status}`);
+  }
+
+  const result = await response.json();
+  return result.secure_url;
+}
+
+/**
+ * Cloudinary에서 이미지 삭제
+ */
+async function deleteImageFromCloudinary(imageUrl: string): Promise<boolean> {
+  const publicId = extractPublicIdFromUrl(imageUrl);
+  if (!publicId) {
+    console.warn('Could not extract public_id from URL:', imageUrl);
+    return false;
+  }
+
+  try {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = await generateDeleteSignature(publicId, timestamp);
+
+    const formData = new FormData();
+    formData.append('public_id', publicId);
+    formData.append('api_key', CLOUDINARY_API_KEY);
+    formData.append('timestamp', timestamp.toString());
+    formData.append('signature', signature);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/destroy`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Cloudinary delete failed:', await response.text());
+      return false;
+    }
+
+    const result = await response.json();
+    return result.result === 'ok';
+  } catch (error) {
+    console.error('Error deleting from Cloudinary:', error);
+    return false;
+  }
+}
+
+/**
+ * ImageFile 객체를 Cloudinary에 업로드하고 URL로 변환된 객체 반환
  */
 async function uploadImageFile(
   imageFile: ImageFile,
-  prefix: string
+  folder: string
 ): Promise<ImageFile> {
-  // 이미 외부 URL인 경우 (ImgBB URL 등) 그대로 반환
+  // 이미 Cloudinary URL인 경우 그대로 반환
+  if (!imageFile.base64 && imageFile.url && imageFile.url.includes('cloudinary.com')) {
+    const { file, ...rest } = imageFile as any;
+    return rest;
+  }
+
+  // 이미 외부 URL인 경우 (ImgBB 등 레거시) 그대로 반환
   if (!imageFile.base64 && imageFile.url && !imageFile.url.startsWith('data:')) {
-    // file 속성 제거 (Firestore에 저장 불가)
     const { file, ...rest } = imageFile as any;
     return rest;
   }
@@ -94,38 +176,67 @@ async function uploadImageFile(
     return rest;
   }
 
-  const fileName = `${prefix}_${Date.now()}`;
-  const downloadUrl = await uploadImageToImgBB(dataToUpload, fileName);
+  const downloadUrl = await uploadImageToCloudinary(dataToUpload, folder);
 
-  // base64와 file 제거하고 URL로 대체
   return {
     id: imageFile.id,
     url: downloadUrl,
     name: imageFile.name,
     mimeType: imageFile.mimeType,
-    // base64, file은 제외 (ImgBB URL 사용)
   };
 }
 
 /**
- * GenerationResult의 이미지를 ImgBB에 업로드
+ * GenerationResult의 이미지를 Cloudinary에 업로드
  */
 async function uploadGenerationResult(
   result: GenerationResult,
   index: number
 ): Promise<GenerationResult> {
-  // 이미 외부 URL인 경우 그대로 반환
+  // 이미 Cloudinary URL인 경우 그대로 반환
+  if (result.imageUrl.includes('cloudinary.com')) {
+    return result;
+  }
+
+  // 이미 외부 URL인 경우 (레거시) 그대로 반환
   if (!result.imageUrl.startsWith('data:')) {
     return result;
   }
 
-  const fileName = `result_${index}_${Date.now()}`;
-  const downloadUrl = await uploadImageToImgBB(result.imageUrl, fileName);
+  const downloadUrl = await uploadImageToCloudinary(result.imageUrl, "modelcut/results");
 
   return {
     ...result,
     imageUrl: downloadUrl,
   };
+}
+
+/**
+ * 프로젝트의 모든 Cloudinary 이미지 삭제
+ */
+async function deleteProjectImages(project: Workspace): Promise<void> {
+  const deletePromises: Promise<boolean>[] = [];
+
+  // 베이스 이미지 삭제
+  if (project.baseImage?.url?.includes('cloudinary.com')) {
+    deletePromises.push(deleteImageFromCloudinary(project.baseImage.url));
+  }
+
+  // 제품 이미지들 삭제
+  for (const img of project.productImages) {
+    if (img.url?.includes('cloudinary.com')) {
+      deletePromises.push(deleteImageFromCloudinary(img.url));
+    }
+  }
+
+  // 히스토리 이미지들 삭제
+  for (const result of project.history) {
+    if (result.imageUrl?.includes('cloudinary.com')) {
+      deletePromises.push(deleteImageFromCloudinary(result.imageUrl));
+    }
+  }
+
+  await Promise.allSettled(deletePromises);
 }
 
 // ============================================
@@ -140,7 +251,7 @@ function sanitizeForFirestore<T>(data: T): T {
 }
 
 /**
- * 프로젝트 저장 (이미지는 ImgBB, 메타데이터는 Firestore)
+ * 프로젝트 저장 (이미지는 Cloudinary, 메타데이터는 Firestore)
  */
 export async function saveProject(
   project: Workspace,
@@ -153,7 +264,7 @@ export async function saveProject(
     onProgress?.('베이스 이미지 업로드 중...');
     let uploadedBaseImage = null;
     if (project.baseImage) {
-      const uploaded = await uploadImageFile(project.baseImage, 'base');
+      const uploaded = await uploadImageFile(project.baseImage, 'modelcut/base');
       uploadedBaseImage = sanitizeForFirestore(uploaded);
     }
     
@@ -161,7 +272,7 @@ export async function saveProject(
     onProgress?.('제품 이미지 업로드 중...');
     const uploadedProductImages = [];
     for (let i = 0; i < project.productImages.length; i++) {
-      const uploaded = await uploadImageFile(project.productImages[i], `product_${i}`);
+      const uploaded = await uploadImageFile(project.productImages[i], 'modelcut/products');
       uploadedProductImages.push(sanitizeForFirestore(uploaded));
     }
     
@@ -239,7 +350,7 @@ export async function updateProject(
     onProgress?.('베이스 이미지 업로드 중...');
     let uploadedBaseImage = null;
     if (project.baseImage) {
-      const uploaded = await uploadImageFile(project.baseImage, 'base');
+      const uploaded = await uploadImageFile(project.baseImage, 'modelcut/base');
       uploadedBaseImage = JSON.parse(JSON.stringify(uploaded));
     }
     
@@ -247,7 +358,7 @@ export async function updateProject(
     onProgress?.('제품 이미지 업로드 중...');
     const uploadedProductImages = [];
     for (let i = 0; i < project.productImages.length; i++) {
-      const uploaded = await uploadImageFile(project.productImages[i], `product_${i}`);
+      const uploaded = await uploadImageFile(project.productImages[i], 'modelcut/products');
       uploadedProductImages.push(JSON.parse(JSON.stringify(uploaded)));
     }
     
@@ -280,12 +391,17 @@ export async function updateProject(
 }
 
 /**
- * 프로젝트 삭제 (Firestore 문서만 삭제, ImgBB 이미지는 유지됨)
+ * 프로젝트 삭제 (Firestore 문서 + Cloudinary 이미지 모두 삭제)
  */
-export async function deleteProject(docId: string): Promise<void> {
+export async function deleteProject(docId: string, project?: Workspace): Promise<void> {
   try {
+    // Cloudinary 이미지 삭제 (project 데이터가 있는 경우)
+    if (project) {
+      console.log("🗑️ Deleting Cloudinary images...");
+      await deleteProjectImages(project);
+    }
+
     // Firestore 문서 삭제
-    // 참고: ImgBB는 무료 플랜에서 이미지 삭제 API를 제공하지 않음
     await deleteDoc(doc(db, "projects", docId));
     console.log("✅ Project deleted:", docId);
     

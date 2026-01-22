@@ -312,10 +312,13 @@ const App: React.FC = () => {
     });
   };
   
-  // 워크스페이스 삭제
+  // 워크스페이스 삭제 (Cloudinary 이미지도 함께 삭제)
   const handleDeleteWorkspace = async (wsId: string) => {
     try {
-      await deleteProject(wsId);
+      // 삭제할 워크스페이스 찾기 (Cloudinary 이미지 삭제용)
+      const workspaceToDelete = state.workspaces.find(w => w.id === wsId);
+      
+      await deleteProject(wsId, workspaceToDelete);
       
       setState(prev => ({
         ...prev,
