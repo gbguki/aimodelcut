@@ -20,6 +20,7 @@ export interface GenerationConfig {
   prompt?: string;
   previousImage?: string;
   imageSize?: string;
+  referenceImage?: ImageFile;  // 포즈/구도 참고 이미지
 }
 
 export interface GenerationResult {

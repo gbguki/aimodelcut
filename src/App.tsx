@@ -4,7 +4,6 @@ import ImageUploader from './components/ImageUploader';
 import { generateFashionImage } from './services/geminiService';
 import { fetchProjects, saveProject, updateProject, deleteProject } from './services/firebaseService';
 import { AppState, AspectRatio, ImageFile, GenerationResult, Workspace } from './types';
-import { removeBackground } from '@imgly/background-removal';
 
 const App: React.FC = () => {
   const [state, setState] = useState<AppState>({
@@ -43,6 +42,9 @@ const App: React.FC = () => {
   // 다운로드 관련 상태
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  
+  // 참고 이미지 (포즈/구도 참고용)
+  const [referenceImage, setReferenceImage] = useState<ImageFile | null>(null);
 
   const timelineEndRef = useRef<HTMLDivElement>(null);
 
@@ -133,7 +135,8 @@ const App: React.FC = () => {
       const result = await generateFashionImage(state.baseImage, state.productImages, {
         aspectRatio,
         prompt,
-        previousImage: currentResult?.imageUrl
+        previousImage: currentResult?.imageUrl,
+        referenceImage: referenceImage || undefined
       });
 
       const newVersion: GenerationResult = {
@@ -156,6 +159,7 @@ const App: React.FC = () => {
         };
       });
       setPrompt('');
+      setReferenceImage(null); // 참고 이미지 초기화
       setHasUnsavedChanges(true);
     } catch (err: any) {
       setState(prev => ({ ...prev, isGenerating: false, error: err.message || 'Error generating image.' }));
@@ -390,7 +394,7 @@ const App: React.FC = () => {
     }
   };
 
-  // 이미지 다운로드 (배경 제거)
+  // 이미지 다운로드 (배경 제거 - remove.bg API)
   const handleDownloadNoBg = async () => {
     if (!currentResult) return;
     
@@ -400,8 +404,30 @@ const App: React.FC = () => {
       const response = await fetch(currentResult.imageUrl);
       const blob = await response.blob();
       
-      // 배경 제거
-      const removedBgBlob = await removeBackground(blob);
+      // remove.bg API 호출
+      const formData = new FormData();
+      formData.append('image_file', blob, 'image.png');
+      formData.append('size', 'auto');
+      
+      const apiKey = import.meta.env.VITE_REMOVEBG_API_KEY;
+      if (!apiKey) {
+        throw new Error('Remove.bg API 키가 설정되지 않았습니다.');
+      }
+      
+      const removeBgResponse = await fetch('https://api.remove.bg/v1.0/removebg', {
+        method: 'POST',
+        headers: {
+          'X-Api-Key': apiKey,
+        },
+        body: formData,
+      });
+      
+      if (!removeBgResponse.ok) {
+        const errorData = await removeBgResponse.json();
+        throw new Error(errorData.errors?.[0]?.title || '배경 제거 실패');
+      }
+      
+      const removedBgBlob = await removeBgResponse.blob();
       
       // 다운로드
       const url = URL.createObjectURL(removedBgBlob);
@@ -413,9 +439,9 @@ const App: React.FC = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       setShowDownloadOptions(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Background removal failed:', error);
-      setState(prev => ({ ...prev, error: '배경 제거에 실패했습니다.' }));
+      setState(prev => ({ ...prev, error: error.message || '배경 제거에 실패했습니다.' }));
     } finally {
       setIsRemovingBg(false);
     }
@@ -561,6 +587,48 @@ const App: React.FC = () => {
               rows={4}
               disabled={state.isGenerating}
             />
+            
+            {/* 참고 이미지 - 히스토리가 있을 때만 표시 */}
+            {state.history.length > 0 && (
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] text-gray-500 uppercase tracking-wider">참고 이미지 (포즈/구도)</span>
+                  {referenceImage && (
+                    <button
+                      onClick={() => setReferenceImage(null)}
+                      className="text-[10px] text-red-400 hover:text-red-300"
+                    >
+                      제거
+                    </button>
+                  )}
+                </div>
+                {referenceImage ? (
+                  <div className="relative w-20 h-20 group">
+                    <img 
+                      src={referenceImage.url} 
+                      alt="Reference"
+                      className="w-full h-full object-cover rounded-lg border border-white/10"
+                    />
+                    <button
+                      onClick={() => setReferenceImage(null)}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <i className="fas fa-times text-white text-[8px]"></i>
+                    </button>
+                  </div>
+                ) : (
+                  <ImageUploader
+                    onUpload={(files: ImageFile[]) => {
+                      if (files.length > 0) {
+                        setReferenceImage(files[0]);
+                      }
+                    }}
+                    label="📎"
+                    compact
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           {/* 종횡비 선택 */}
