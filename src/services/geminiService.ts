@@ -147,6 +147,10 @@ export const generateFashionImage = async (
     
     ============================================
     [QUALITY]: Professional 8K photography, campaign quality
+    - Crystal clear sharpness on all details
+    - Perfect skin texture and hair strand visibility
+    - No blur, noise, or artifacts
+    - Magazine-ready output quality
   `;
 
   const hasBaseImage = baseImage !== null;
@@ -163,6 +167,13 @@ export const generateFashionImage = async (
     - KEEP the same model, face, identity, and overall style
     - ONLY modify what is specifically requested in the prompt
     - Do NOT regenerate from scratch - this is an EDIT, not a new creation
+    
+    [QUALITY CRITICAL - MUST FOLLOW]:
+    - Output MUST maintain or EXCEED the input image quality
+    - Preserve ALL fine details: skin texture, hair strands, fabric weave, sharp edges
+    - Do NOT introduce blur, noise, artifacts, or compression
+    - Keep 8K professional photography sharpness throughout
+    - If quality cannot be maintained, prioritize sharpness over changes
     `;
   }
   
