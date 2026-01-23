@@ -526,13 +526,13 @@ const App: React.FC = () => {
                   </button>
                 </div>
               ))}
-              {state.productImages.length < 10 && (
+              {state.productImages.length < 15 && (
                 <ImageUploader
                   onUpload={(files: ImageFile[]) => {
                     if (files.length > 0) {
                       setState(prev => {
                         // 최대 4개까지만 추가
-                        const remainingSlots = 10 - prev.productImages.length;
+                        const remainingSlots = 15 - prev.productImages.length;
                         const filesToAdd = files.slice(0, remainingSlots);
                         return { 
                           ...prev, 
