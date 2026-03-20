@@ -391,4 +391,6 @@ export const generateFashionImage = async (
       await sleep(600 * attempt);
     }
   }
+
+  throw new Error("이미지 생성에 실패했습니다. 다시 시도해주세요.");
 };
