@@ -59,6 +59,8 @@ export const generateFashionImage = async (
   productImages: ImageFile[],
   config: GenerationConfig
 ): Promise<{ imageUrl: string; summary: string; groundingChunks?: any[] }> => {
+  const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_API_KEY;
   
   if (!apiKey) {
@@ -269,45 +271,70 @@ export const generateFashionImage = async (
     }
   }
 
-  try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview',
-      contents: { parts },
-      config: {
-        systemInstruction: systemInstruction,
-        imageConfig: {
-          aspectRatio: getApiAspectRatio(config.aspectRatio) as any,
-          imageSize: config.imageSize || '1024'
-        }
-      },
-    });
+  // Gemini 이미지 생성은 요청이 무겁거나(이미지 다수/큰 base64) 일시 장애가 있을 때
+  // 503 + UNAVAILABLE/Deadline expired 형태로 떨어질 수 있어서 간단 재시도를 둡니다.
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-3-pro-image-preview',
+        contents: { parts },
+        config: {
+          systemInstruction: systemInstruction,
+          imageConfig: {
+            aspectRatio: getApiAspectRatio(config.aspectRatio) as any,
+            imageSize: config.imageSize || '1024'
+          }
+        },
+      });
 
-    let imageUrl = '';
-    let summary = '';
+      let imageUrl = '';
+      let summary = '';
 
-    if (response.candidates && response.candidates.length > 0) {
-      const candidate = response.candidates[0];
-      const contentParts = candidate?.content?.parts;
-      if (contentParts) {
-        for (const part of contentParts) {
-          if (part.inlineData) {
-            imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-          } else if (part.text) {
-            summary = part.text.trim().split('\n')[0];
+      if (response.candidates && response.candidates.length > 0) {
+        const candidate = response.candidates[0];
+        const contentParts = candidate?.content?.parts;
+        if (contentParts) {
+          for (const part of contentParts) {
+            if (part.inlineData) {
+              imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            } else if (part.text) {
+              summary = part.text.trim().split('\n')[0];
+            }
           }
         }
       }
+
+      if (!imageUrl) throw new Error("이미지 생성에 실패했습니다. 다시 시도해주세요.");
+
+      return { 
+        imageUrl, 
+        summary, 
+        groundingChunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks 
+      };
+    } catch (error: any) {
+      console.error(`Gemini API Error (attempt ${attempt}/${maxAttempts}):`, error);
+
+      const errMessage =
+        error instanceof Error ? error.message :
+        typeof error?.message === 'string' ? error.message :
+        JSON.stringify(error);
+
+      const isUnavailable =
+        error?.code === 503 ||
+        error?.status === 'UNAVAILABLE' ||
+        /UNAVAILABLE|Deadline expired/i.test(errMessage);
+
+      if (!isUnavailable || attempt === maxAttempts) {
+        // UI에서 err.message를 보여주기 때문에 Error로 감싸서 message를 확실히 만듭니다.
+        if (isUnavailable) {
+          throw new Error("이미지 생성 요청이 일시적으로 실패했습니다(503 UNAVAILABLE). 잠시 후 다시 시도해 주세요.");
+        }
+        throw new Error(errMessage || "Gemini API 요청에 실패했습니다.");
+      }
+
+      // 백오프: 1회 600ms, 2회 1200ms ...
+      await sleep(600 * attempt);
     }
-
-    if (!imageUrl) throw new Error("이미지 생성에 실패했습니다. 다시 시도해주세요.");
-
-    return { 
-      imageUrl, 
-      summary, 
-      groundingChunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks 
-    };
-  } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    throw error;
   }
 };
