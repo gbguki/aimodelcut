@@ -38,17 +38,70 @@ async function urlToBase64(url: string): Promise<{ base64: string; mimeType: str
 }
 
 /**
+ * base64(dataUrl) 이미지가 너무 큰 경우, 캔버스로 다운스케일/재압축해서
+ * Gemini 요청 payload 크기를 줄입니다.
+ */
+async function maybeResizeBase64Image(
+  base64: string,
+  mimeType: string,
+  options?: { maxDimension?: number; quality?: number; minBase64LengthToResize?: number }
+): Promise<{ base64: string; mimeType: string }> {
+  const maxDimension = options?.maxDimension ?? 1024;
+  const quality = options?.quality ?? 0.86;
+  const minBase64LengthToResize = options?.minBase64LengthToResize ?? 1_200_000; // base64 문자 길이 기준(대략)
+
+  // 이미 충분히 작은 경우에는 품질 저하를 피하기 위해 그대로 사용
+  if (base64.length < minBase64LengthToResize) {
+    return { base64, mimeType };
+  }
+
+  const dataUrl = `data:${mimeType};base64,${base64}`;
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = dataUrl;
+  });
+
+  const width = img.naturalWidth || img.width;
+  const height = img.naturalHeight || img.height;
+  if (!width || !height) return { base64, mimeType };
+
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { base64, mimeType };
+
+  ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+  // 크기 줄이기 위해 JPEG로 재인코딩
+  const resizedDataUrl = canvas.toDataURL("image/jpeg", quality);
+  const matches = resizedDataUrl.match(/^data:image\/jpeg;base64,(.+)$/);
+  if (!matches?.[1]) return { base64, mimeType };
+
+  return { base64: matches[1], mimeType: "image/jpeg" };
+}
+
+/**
  * ImageFile에서 base64 데이터를 확보하는 함수
  */
 async function ensureBase64(imageFile: ImageFile): Promise<{ base64: string; mimeType: string }> {
   // 이미 base64가 있으면 그대로 사용
   if (imageFile.base64 && imageFile.mimeType) {
-    return { base64: imageFile.base64, mimeType: imageFile.mimeType };
+    return await maybeResizeBase64Image(imageFile.base64, imageFile.mimeType);
   }
 
   // URL에서 base64 가져오기
   if (imageFile.url) {
-    return await urlToBase64(imageFile.url);
+    const { base64, mimeType } = await urlToBase64(imageFile.url);
+    return await maybeResizeBase64Image(base64, mimeType);
   }
 
   throw new Error('이미지 데이터가 없습니다.');
