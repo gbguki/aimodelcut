@@ -297,7 +297,8 @@ export const generateFashionImage = async (
   // Previous Image (이전 생성 결과 기반 수정 시)
   if (config.previousImage) {
     try {
-      const prevData = await urlToBase64(config.previousImage);
+      const prevRaw = await urlToBase64(config.previousImage);
+      const prevData = await maybeResizeBase64Image(prevRaw.base64, prevRaw.mimeType, { maxDimension: 768, minBase64LengthToResize: 0 });
       parts.push({
         inlineData: {
           data: prevData.base64,
@@ -336,7 +337,7 @@ export const generateFashionImage = async (
           systemInstruction: systemInstruction,
           imageConfig: {
             aspectRatio: getApiAspectRatio(config.aspectRatio) as any,
-            imageSize: config.imageSize || '1024'
+            imageSize: config.imageSize || '1K'
           }
         },
       });
